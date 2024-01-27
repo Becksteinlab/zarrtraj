@@ -30,8 +30,6 @@ class ZarrTrajReader(base.ReaderBase):
     @store_init_arguments
     def __init__(self, filename,
                  convert_units=True,
-                 driver=None,
-                 comm=None,
                  **kwargs):
         
         if not HAS_ZARR:
@@ -90,7 +88,7 @@ class ZarrTrajReader(base.ReaderBase):
 
         try:
             # Try opening the file with Zarr
-            zarr.open(thing, mode='r')
+            zarr.open_group(thing, mode='r')
             return True
         except Exception:
             # If an error occurs, it's likely not a Zarr file
@@ -104,6 +102,10 @@ class ZarrTrajReader(base.ReaderBase):
         else:
             self._file = zarr.open_group(self.filename,
                                          mode='r')
+        # pulls first key out of 'particles'
+        # allows for arbitrary name of group1 in 'particles'
+        self._particle_group = self._file['particles'][
+            list(self._file['particles'])[0]]
      
     @staticmethod
     def parse_n_atoms(filename):
@@ -117,8 +119,75 @@ class ZarrTrajReader(base.ReaderBase):
                             "Zarrtraj trajectory file, as it did not contain a "
                             "'position', 'velocity', or 'force' group. "
                             "You must include a topology file.")
-        
     
+    def close(self):
+        """close reader"""
+        self._file.store.close()
+    
+    def _reopen(self):
+        """reopen trajectory"""
+        self.close()
+        self.open_trajectory()
+
+    @property
+    def n_frames(self):
+        """number of frames in trajectory"""
+        for name, value in self._has.items():
+            if value:
+                return self._particle_group[name]['value'].shape[0]
+            
+    def _read_frame(self, frame):
+        """reads data from zarrtraj file and copies to current timestep"""
+        try:
+            for name, value in self._has.items():
+                if value:
+                    _ = self._particle_group[name]['step'][frame]
+                    break
+            else:
+                raise NoDataError("Provide at least a position, velocity"
+                                  " or force group in the h5md file.")
+        except (ValueError, IndexError):
+            raise IOError from None
+
+        self._frame = frame
+        ts = self.ts
+        particle_group = self._particle_group
+        ts.frame = frame
+
+        # fills data dictionary from 'observables' group
+        # Note: dt is not read into data as it is not decided whether
+        # Timestep should have a dt attribute (see Issue #2825)
+        self._copy_to_data()
+
+        # Sets frame box dimensions
+        # Note: H5MD files must contain 'box' group in each 'particles' group
+        if "edges" in particle_group["box"]:
+            edges = particle_group["box/edges/value"][frame, :]
+            # A D-dimensional vector or a D × D matrix, depending on the
+            # geometry of the box, of Float or Integer type. If edges is a
+            # vector, it specifies the space diagonal of a cuboid-shaped box.
+            # If edges is a matrix, the box is of triclinic shape with the edge
+            # vectors given by the rows of the matrix.
+            if edges.shape == (3,):
+                ts.dimensions = [*edges, 90, 90, 90]
+            else:
+                ts.dimensions = core.triclinic_box(*edges)
+        else:
+            ts.dimensions = None
+
+        # set the timestep positions, velocities, and forces with
+        # current frame dataset
+        if self._has['position']:
+            self._read_dataset_into_ts('position', ts.positions)
+        if self._has['velocity']:
+            self._read_dataset_into_ts('velocity', ts.velocities)
+        if self._has['force']:
+            self._read_dataset_into_ts('force', ts.forces)
+
+        if self.convert_units:
+            self._convert_units()
+
+        return ts
 
 class ZarrTrajWriter(base.WriterBase):
     format = 'ZARRTRAJ'
