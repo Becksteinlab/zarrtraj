@@ -34,6 +34,8 @@ test = [
     "pytest-xdist>=2.5",
     "pytest-cov>=3.0",
     "MDAnalysisTests>=2.0.0",
+    "fsspec",
+    "s3fs",
 ]
 doc = [
     "sphinx",
@@ -45,7 +47,8 @@ doc = [
 # documentation = "https://zarrtraj.readthedocs.io"
 
 [tool.setuptools]
-py-modules = []
+packages = ["zarrtraj"]
+py-modules = ["__init__"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

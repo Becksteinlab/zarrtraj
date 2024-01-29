@@ -29,6 +29,7 @@ class ZarrTrajReader(base.ReaderBase):
 
     @store_init_arguments
     def __init__(self, filename,
+                 storage_options=None,
                  **kwargs):
         
         if not HAS_ZARR:
@@ -37,6 +38,11 @@ class ZarrTrajReader(base.ReaderBase):
         self.filename = filename
         # NOTE: Not yet implemented
         # self.convert_units = convert_units 
+
+        # NOTE: Add error checking
+        # These options will be passed to zarr.open_group()
+        # To allow fss
+        self.storage_options = storage_options
 
         self.open_trajectory()
         
@@ -88,7 +94,7 @@ class ZarrTrajReader(base.ReaderBase):
         except Exception:
             # If an error occurs, it's likely not a Zarr file
             return False
-        
+
     def open_trajectory(self):
         """opens the trajectory file using zarr library"""
         self._frame = -1
@@ -96,12 +102,13 @@ class ZarrTrajReader(base.ReaderBase):
             self._file = self.filename
         else:
             self._file = zarr.open_group(self.filename,
-                                         mode='r')
+                                         mode='r',
+                                         storage_options=self.storage_options)
         # pulls first key out of 'particles'
         # allows for arbitrary name of group1 in 'particles'
         self._particle_group = self._file['particles'][
             list(self._file['particles'])[0]]
-     
+
     @staticmethod
     def parse_n_atoms(filename):
         # NOTE: This may fail if the filename passed is already a zarr group
