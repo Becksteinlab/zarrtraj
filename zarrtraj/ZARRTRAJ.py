@@ -39,9 +39,6 @@ class ZarrTrajReader(base.ReaderBase):
         # self.convert_units = convert_units 
 
         self.open_trajectory()
-        if self._particle_group['box'].attrs['dimension'] != 3:
-            raise ValueError("MDAnalysis only supports 3-dimensional"
-                             " simulation boxes")
         
         # _has dictionary used for checking whether zarrtraj file has
         # 'position', 'velocity', or 'force' groups in the file
@@ -219,9 +216,11 @@ class ZarrTrajReader(base.ReaderBase):
                              f" dataset had {self.n_atoms} atoms."
                              " MDAnalysis is unable to deal"
                              " with variable topology!")
-
-        self._particle_group[f'{dataset}/value'].read_direct(
-                             attribute, source_sel=np.s_[self._frame, :])
+        
+        self._particle_group[f'{dataset}/value'].get_basic_selection(
+            selection=np.s_[self._frame, :],
+            out=attribute
+        )
     
     def _read_next_timestep(self):
         """read next frame in trajectory"""
@@ -269,5 +268,5 @@ class ZarrTrajWriter(base.WriterBase):
     format = 'ZARRTRAJ'
     multiframe = True
 
-    raise NotImplementedError("There is currently no writer for TNG files")
+    # raise NotImplementedError("There is currently no writer for Zarrtraj files")
 
