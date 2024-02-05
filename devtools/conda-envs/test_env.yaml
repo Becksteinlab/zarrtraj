@@ -16,10 +16,11 @@ dependencies:
   - MDAnalysisData
   - h5py
   - pandas
+  - MDAnalysisTests
 
   # MDAKit requires
   - zarr
-  - fsspsec # Only needed for web services connections
+  - fsspec # Only needed for web services connections
   - s3fs # Onle needed for AWS integration
 
   # Pip-only installs
