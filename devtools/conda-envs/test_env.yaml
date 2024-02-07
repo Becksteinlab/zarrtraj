@@ -17,6 +17,7 @@ dependencies:
   - h5py
   - pandas
   - MDAnalysisTests
+  - dask
 
   # MDAKit requires
   - zarr
