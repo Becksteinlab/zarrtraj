@@ -5,7 +5,7 @@ from MDAnalysis.exceptions import NoDataError
 from MDAnalysis.due import due, Doi
 from MDAnalysis.lib.util import store_init_arguments
 import dask.array as da
-
+import time # NOTE: REMOVE after test
 
 
 try:
@@ -327,7 +327,7 @@ class ZarrTrajWriter(base.WriterBase):
             # If not chunk size, choose sensible default that 
             # fits in memory size
             # and takes up >1 mB of memory
-            self.chunks = (10, n_atoms, 3)
+            self.chunks = (100, n_atoms, 3)
             self.n_buffer_frames = self.chunks[0]
             # NOTE: if buffer ends up being in memory,
             # n_buffer frames will end up being calculated based on 
@@ -419,7 +419,6 @@ class ZarrTrajWriter(base.WriterBase):
                 self._initialize_memory_buffers()
                 self._write_next_timestep = self._write_next_cloud_timestep
                 self._initial_write = False
-
         return self._write_next_timestep(ts)
 
     #def _determine_units(self, ag):
@@ -528,12 +527,14 @@ class ZarrTrajWriter(base.WriterBase):
             self._time = self._traj.require_dataset('box/edges/time',
                                                     shape=(first_dim,),
                                                     dtype=np.float32)
+            self._has_edges = True
             #self._set_attr_unit(self._edges, 'length')
             #self._set_attr_unit(self._time, 'time')
         else:
             # if no box, boundary attr must be "none" 
             self._traj['box'].attrs['boundary'] = 3*['none']
             self._create_step_and_time_datasets()
+            self._has_edges = False
 
         if self.has_positions:
             self._create_trajectory_dataset('position')
@@ -608,19 +609,21 @@ class ZarrTrajWriter(base.WriterBase):
     def _initialize_memory_buffers(self):
         # NOTE: chunks may change for time, step, and edges if using
         # in memory buffer that can fit multiple chunks
-        self._time_buffer = da.zeros((self.n_buffer_frames,), chunks=(self.n_buffer_frames,), dtype=np.float32)
-        self._step_buffer = da.zeros((self.n_buffer_frames,), chunks=(self.n_buffer_frames,), dtype=np.int32)
-        self._edges_buffer = da.zeros((self.n_buffer_frames, 3, 3), chunks=(self.n_buffer_frames, 3, 3), dtype=np.float32)
+        self._time_buffer = np.zeros((self.n_buffer_frames,), dtype=np.float32)
+        self._step_buffer = np.zeros((self.n_buffer_frames,), dtype=np.int32)
+        self._edges_buffer = np.zeros((self.n_buffer_frames, 3, 3), dtype=np.float32)
         if self.has_positions:
-            self._pos_buffer = da.zeros((self.n_buffer_frames, self.n_atoms, 
-                                         3), chunks=self.chunks, dtype=np.float32)
+            self._pos_buffer = np.zeros((self.n_buffer_frames, self.n_atoms, 
+                                         3), dtype=np.float32)
         if self.has_velocities:
-            self._force_buffer = da.zeros((self.n_buffer_frames, self.n_atoms, 
-                                         3), chunks=self.chunks, dtype=np.float32)
+            self._force_buffer = np.zeros((self.n_buffer_frames, self.n_atoms, 
+                                         3), dtype=np.float32)
         if self.has_forces:
-            self._vel_buffer = da.zeros((self.n_buffer_frames, self.n_atoms, 
-                                         3), chunks=self.chunks, dtype=np.float32)
-            
+            self._vel_buffer = np.zeros((self.n_buffer_frames, self.n_atoms, 
+                                         3), dtype=np.float32)
+        # Reduce cloud I/O by storing previous step val for error checking
+        self._prev_step = None
+
     def _write_next_cloud_timestep(self, ts):
         """
         This method performs two steps:
@@ -629,18 +632,23 @@ class ZarrTrajWriter(base.WriterBase):
         
         
         """
+        
         i = self._counter
         buffer_index = i % self.n_buffer_frames
         # Add the current timestep information to the buffer
         try:
-            self._step_buffer[buffer_index] = ts.data['step']
+            curr_step = ts.data['step']
         except KeyError:
-            self._step_buffer[buffer_index] = ts.frame
-        if len(self._step) > 1 and self._step[i] < self._step[i-1]:
+            curr_step = ts.frame
+        self._step_buffer[buffer_index] = ts.frame
+        if self._prev_step is not None and curr_step < self._prev_step:
             raise ValueError("The Zarrtraj standard dictates that the step "
                              "dataset must increase monotonically in value.")
+        self._prev_step = curr_step
+        start = time.time()
         self._time_buffer[buffer_index] = ts.time
-        if 'edges' in self._traj['box']:
+
+        if self._has_edges:
             self._edges_buffer[buffer_index, :] = ts.triclinic_dimensions
         if self.has_positions:
             self._pos_buffer[buffer_index, :] = ts.positions
@@ -648,21 +656,24 @@ class ZarrTrajWriter(base.WriterBase):
             self._vel_buffer[buffer_index, :] = ts.velocities
         if self.has_forces:
             self._force_buffer[buffer_index, :] = ts.forces
-
+        stop = time.time()
+        print(f"Writing to the buffer took {stop-start} seconds")
         # If buffer is full or last write call, write buffer to cloud
-        if ((i and i % (self.n_buffer_frames - 1) == 0) or
+        if (((i + 1) % self.n_buffer_frames == 0) or
                 (i == self.n_frames - 1)):
-            t = type(self._step)
-            da.to_zarr(self._step_buffer[:buffer_index + 1], self._step, region=(slice(i - buffer_index, i + 1),))
-            da.to_zarr(self._time_buffer[:buffer_index + 1], self._time, region=(slice(i - buffer_index, i + 1),))
-            if 'edges' in self._traj['box']:
-                da.to_zarr(self._edges_buffer[:buffer_index + 1], self._edges, region=(slice(i - buffer_index, i + 1),))
+            start = time.time()
+            da.from_array(self._step_buffer[:buffer_index + 1]).to_zarr(self._step, region=(slice(i - buffer_index, i + 1),), return_stored=True)
+            da.from_array(self._time_buffer[:buffer_index + 1]).to_zarr(self._time, region=(slice(i - buffer_index, i + 1),))
+            if self._has_edges:
+                da.from_array(self._edges_buffer[:buffer_index + 1]).to_zarr(self._edges, region=(slice(i - buffer_index, i + 1),))
             if self.has_positions:
-                da.to_zarr(self._pos_buffer[:buffer_index + 1], self._pos, region=(slice(i - buffer_index, i + 1),))
+                da.from_array(self._pos_buffer[:buffer_index + 1]).to_zarr(self._pos, region=(slice(i - buffer_index, i + 1),))
             if self.has_velocities:
-                da.to_zarr(self._vel_buffer[:buffer_index + 1], self._vel, region=(slice(i - buffer_index, i + 1),))
+                da.from_array(self._vel_buffer[:buffer_index + 1]).to_zarr(self._vel, region=(slice(i - buffer_index, i + 1),))
             if self.has_forces:
-                da.to_zarr(self._force_buffer[:buffer_index + 1], self._force, region=(slice(i - buffer_index, i + 1),))
+                da.from_array(self._force_buffer[:buffer_index + 1]).to_zarr(self._force, region=(slice(i - buffer_index, i + 1),))
+            stop = time.time()
+            print(f"Flushing this buffer took {stop-start} seconds")
         #if self.convert_units:
         #    self._convert_dataset_with_units(i)
         self._counter += 1
