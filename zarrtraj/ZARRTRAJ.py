@@ -35,6 +35,8 @@ class ZarrTrajReader(base.ReaderBase):
             +-- is an attribute of a group or Zarr array
 
             Zarr root
+                \-- (zarrtraj)
+                    +-- version <str>
                 \-- (particles)
                 \-- (units)
                     +-- distance <str>
@@ -413,7 +415,7 @@ class ZarrTrajWriter(base.WriterBase):
     multiframe = True
 
     #: currently written version of the file format
-    ZARRTRAJ_VERSION = (1, 0)
+    ZARRTRAJ_VERSION = "1.0"
 
     _unit_translation_dict = {
         'time': {
@@ -622,7 +624,8 @@ class ZarrTrajWriter(base.WriterBase):
         self.zarr_group = self.filename
 
         # fill in Zarrtraj metadata from kwargs
-        self.zarr_group['zarrtraj'].attrs['version'] = np.array(self.ZARRTRAJ_VERSION)
+        self.zarr_group.require_group('zarrtraj')
+        self.zarr_group['zarrtraj'].attrs['version'] = self.ZARRTRAJ_VERSION
 
 
     def _initialize_zarr_datasets(self, ts):
@@ -640,7 +643,7 @@ class ZarrTrajWriter(base.WriterBase):
 
         # for keeping track of where to write in the dataset
         self._counter = 0
-        first_dim = self.n_frames if self._is_cloud_storage else 0
+        first_dim = self.n_frames if self.n_frames is not None else 0
 
         # ask the parent file if it has positions, velocities, and forces
         # if prompted by the writer with the self._write_* attributes
@@ -649,7 +652,7 @@ class ZarrTrajWriter(base.WriterBase):
                      else False for group, attr in zip(
                      ('position', 'velocity', 'force'),
                      ('positions', 'velocities', 'forces'))}
-
+        # add
         # initialize trajectory group
         self.zarr_group.require_group('particles').require_group('trajectory')
         self._traj = self.zarr_group['particles/trajectory']
@@ -714,7 +717,7 @@ class ZarrTrajWriter(base.WriterBase):
                for all datasets that share the same step and time.
 
         """
-        first_dim = self.n_frames if self._is_cloud_storage else 0
+        first_dim = self.n_frames if self.n_frames is not None else 0
         for group, value in self._has.items():
             if value:
                 self._step = self._traj.require_dataset(f'{group}/step',
