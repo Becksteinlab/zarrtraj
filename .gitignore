@@ -71,6 +71,9 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Jupyter Notebook benchmark files
+notebooks/notebook_data_tmp
+
 # pyenv
 .python-version
 
