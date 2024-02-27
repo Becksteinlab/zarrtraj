@@ -5,7 +5,7 @@ This is a kit that provides the ability to read and write trajectory data in the
 
 # Add imports here
 from importlib.metadata import version
-from .ZARRTRAJ import ZarrTrajReader
+from .ZARRTRAJ import *
 
 # Monkey patch to prevent mda from selecting
 # ChainReader for zarr group

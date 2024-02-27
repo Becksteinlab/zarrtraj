@@ -9,9 +9,11 @@ Use as ::
 """
 
 __all__ = [
-    "MDANALYSIS_LOGO",  # example file of MDAnalysis logo
+    "COORDINATES_ZARRTRAJ",  # traj created with create_zarrtraj_data.py
+    "ZARRTRAJ_xvf",  # sample topology
 ]
 
 from pkg_resources import resource_filename
 
-MDANALYSIS_LOGO = resource_filename(__name__, "mda.txt")
+COORDINATES_ZARRTRAJ = resource_filename(__name__, "test.zarrtraj")
+ZARRTRAJ_xvf = resource_filename(__name__, "test_topology.pdb")

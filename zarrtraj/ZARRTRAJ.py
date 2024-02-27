@@ -38,34 +38,34 @@ class ZarrTrajReader(base.ReaderBase):
                 \-- (zarrtraj)
                     +-- version <str>
                 \-- (particles)
-                \-- (units)
-                    +-- distance <str>
-                    +-- velocity <str>
-                    +-- force <str>
-                    +-- time <str>
-                    +-- angle <str>
-                \-- {group1}
-                    \-- (box)
-                        \-- (edges)
+                    \-- (units)
+                        +-- distance <str>
+                        +-- velocity <str>
+                        +-- force <str>
+                        +-- time <str>
+                        +-- angle <str>
+                    \-- {group1}
+                        \-- (box)
+                            \-- (edges)
+                                \-- [step] <int>, gives frame
+                                +-- boundary : <str>, boundary conditions of unit cell
+                                \-- [value] <float>, gives box dimensions
+                                    +-- unit <str>
+                        \-- (position)
                             \-- [step] <int>, gives frame
-                            +-- boundary : <str>, boundary conditions of unit cell
-                            \-- [value] <float>, gives box dimensions
-                                +-- unit <str>
-                    \-- (position)
-                        \-- [step] <int>, gives frame
-                        \-- [time] <float>, gives time
-                        \-- [value] <float>, gives numpy array of positions
-                                                with shape (frame, n_atoms, 3)
-                    \-- (velocity)
-                        \-- [step] <int>, gives frame
-                        \-- [time] <float>, gives time
-                        \-- [value] <float>, gives numpy array of velocities
-                                                with shape (frame, n_atoms, 3)
-                    \-- (force)
-                        \-- [step] <int>, gives frame
-                        \-- [time] <float>, gives time
-                        \-- [value] <float>, gives numpy array of forces
-                                                with shape (frame, n_atoms, 3)
+                            \-- [time] <float>, gives time
+                            \-- [value] <float>, gives numpy array of positions
+                                                    with shape (frame, n_atoms, 3)
+                        \-- (velocity)
+                            \-- [step] <int>, gives frame
+                            \-- [time] <float>, gives time
+                            \-- [value] <float>, gives numpy array of velocities
+                                                    with shape (frame, n_atoms, 3)
+                        \-- (force)
+                            \-- [step] <int>, gives frame
+                            \-- [time] <float>, gives time
+                            \-- [value] <float>, gives numpy array of forces
+                                                    with shape (frame, n_atoms, 3)
     """
 
     format = 'ZARRTRAJ'
@@ -121,8 +121,7 @@ class ZarrTrajReader(base.ReaderBase):
             raise RuntimeError("Please install zarr")
         super(ZarrTrajReader, self).__init__(filename, **kwargs)
         self.filename = filename
-        # NOTE: Not yet implemented
-        self.convert_units = convert_units 
+        self.convert_units = convert_units
 
         self.open_trajectory()
         
@@ -180,12 +179,12 @@ class ZarrTrajReader(base.ReaderBase):
 
         try:
             self.units[unit] = self._unit_translation[unit][
-                self._particle_group['units'].attrs[unit]]
+                self._file['particles']['units'].attrs[unit]]
         except KeyError:
             raise RuntimeError(errmsg.format(
-                                unit, self._particle_group[
+                                unit, self._file['particles'][
                                     'units'].attrs['time'])
-                                    ) from None
+                               ) from None
         
     def _check_units(self, group, unit):
         """Raises error if no units are provided from Zarrtraj file
@@ -261,12 +260,16 @@ class ZarrTrajReader(base.ReaderBase):
         """reads data from zarrtraj file and copies to current timestep"""
         try:
             for name, value in self._has.items():
-                if value:
+                if value and 'step' in self._particle_group[name]:
                     _ = self._particle_group[name]['step'][frame]
                     break
             else:
-                raise NoDataError("Provide at least a position, velocity"
-                                  " or force group in the zarrtraj file.")
+                if self._has_edges and 'step' in self._particle_group['box']['edges']:
+                    _ = self._particle_group['box']['edges']['step'][frame]
+                else:
+                    raise NoDataError("Provide at least a position, velocity"
+                                    " or force group in the zarrtraj file.")
+            
         except (ValueError, IndexError):
             raise IOError from None
 
@@ -371,6 +374,19 @@ class ZarrTrajReader(base.ReaderBase):
         """read next frame in trajectory"""
         return self._read_frame(self._frame + 1)
 
+    def Writer(self, filename, n_atoms=None, **kwargs):
+        """Return writer for trajectory format
+        
+        """
+        if n_atoms is None:
+            n_atoms = self.n_atoms
+        kwargs.setdefault('format', "ZARRTRAJ") # NOTE: change main codebase to recognize zarr grps
+        kwargs.setdefault('compressor', self.compressor)
+        kwargs.setdefault('positions', self.has_positions)
+        kwargs.setdefault('velocities', self.has_velocities)
+        kwargs.setdefault('forces', self.has_forces)
+        return ZarrTrajWriter(filename, n_atoms, **kwargs)
+
     @property
     def has_positions(self):
         """``True`` if 'position' group is in trajectory."""
@@ -415,7 +431,7 @@ class ZarrTrajWriter(base.WriterBase):
     multiframe = True
 
     #: currently written version of the file format
-    ZARRTRAJ_VERSION = "1.0"
+    ZARRTRAJ_VERSION = 1
 
     _unit_translation_dict = {
         'time': {
@@ -570,7 +586,7 @@ class ZarrTrajWriter(base.WriterBase):
             if self._is_cloud_storage:
                 self._initialize_memory_buffers()
                 self._write_next_timestep = self._write_next_cloud_timestep
-                self._initial_write = False
+            self._initial_write = False
         return self._write_next_timestep(ts)
     
     def _determine_units(self, ag):
@@ -618,9 +634,6 @@ class ZarrTrajWriter(base.WriterBase):
         # Verify group is open for writing
         if not self.filename.store.is_writeable():
             raise PermissionError("The Zarr group is not writeable")
-        # Group must be empty
-        if len(self.filename.keys()) != 0:
-            raise ValueError("Expected an empty Zarr group")
         self.zarr_group = self.filename
 
         # fill in Zarrtraj metadata from kwargs
@@ -652,12 +665,15 @@ class ZarrTrajWriter(base.WriterBase):
                      else False for group, attr in zip(
                      ('position', 'velocity', 'force'),
                      ('positions', 'velocities', 'forces'))}
-        # add
         # initialize trajectory group
         self.zarr_group.require_group('particles').require_group('trajectory')
         self._traj = self.zarr_group['particles/trajectory']
         # NOTE: subselection init goes here when implemented
         # box group is required for every group in 'particles'
+        # Initialize units group
+        self.zarr_group['particles'].require_group('units')
+        self._unit_group = self.zarr_group['particles']['units']
+
         self._traj.require_group('box')
         if ts.dimensions is not None and np.all(ts.dimensions > 0):
             self._traj['box'].attrs['boundary'] = 3*['periodic']
@@ -745,10 +761,11 @@ class ZarrTrajWriter(base.WriterBase):
                                    chunks=self.chunks,
                                    filters=self.filters,
                                    compressor=self.compressor)
-        if 'step' not in self._traj[group]:
-            self._traj[f'{group}/step'] = self._step
-        if 'time' not in self._traj[group]:
-            self._traj[f'{group}/time'] = self._time
+        # Hard linking in zarr is not possible, so we only keep one step and time aray
+        # if 'step' not in self._traj[group]:
+        #     self._traj[f'{group}/step'] = self._step
+        # if 'time' not in self._traj[group]:
+        #     self._traj[f'{group}/time'] = self._time
 
     def _set_attr_unit(self, unit):
         """helper function to set a unit attribute for an Zarr dataset"""
@@ -756,7 +773,7 @@ class ZarrTrajWriter(base.WriterBase):
         if self.units[unit] is None:
             return
 
-        self.zarr_group['particles'].attrs[unit] = self._unit_translation_dict[unit][self.units[unit]]
+        self._unit_group.attrs[unit] = self._unit_translation_dict[unit][self.units[unit]]
 
     def _initialize_memory_buffers(self):
         # NOTE: chunks may change for time, step, and edges if using
@@ -869,7 +886,10 @@ class ZarrTrajWriter(base.WriterBase):
         # to use. However, step is also necessary in Zarrtraj to allow
         # temporal matching of the data, so ts.frame is used as an alternative
         new_shape = (self._step.shape[0] + 1,) + self._step.shape[1:]
+        print(self._step.shape)
         self._step.resize(new_shape)
+        print(self._step.shape)
+        print(self._step[:])
         try:
             self._step[i] = ts.data['step']
         except KeyError:
