@@ -1,3 +1,70 @@
+"""
+
+Example: Loading a .zarrtraj file from disk
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To load a ZarrTraj simulation from a .zarrtraj trajectory file, pass a topology file
+and a `zarr.Group`_ object to :class:`~MDAnalysis.core.universe.Universe`::
+
+    import zarrtraj
+    import MDAnalysis as mda
+    u = mda.Universe("topology.tpr", zarr.open_group("trajectory.zarrtraj", mode="r"))
+
+Example: Reading from cloud services
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Zarrtraj currently supports AWS, Google Cloud, and Azure Block Storage backed Zarr groups.
+
+To read from AWS S3, wrap your Zarr group in a Least-Recently-Used cache to reduce I/O::
+
+    import s3fs
+    import zarrtraj
+    import MDAnalysis as mda
+    key = os.getenv('AWS_KEY')
+    secret = os.getenv('AWS_SECRET_KEY')
+    s3 = s3fs.S3FileSystem(key=key, secret=secret)
+    store = s3fs.S3Map(root='<bucket-name>/trajectory.zarrtraj', s3=s3, check=False)
+    cache = LRUStoreCache(store, max_size=2**25) # max_size is cache size in bytes
+    root = zarr.group(store=cache)
+    u = mda.Universe("topology.tpr", root)
+
+Because of this local cache model, random-access trajectory reading for cloud-backed Zarr Groups
+is not currently supported.
+
+Example: Writing to cloud services
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ZarrTrajWriter can write to AWS, Google Cloud, and Azure Block Storage as well. 
+The writer must be passed the `n_frames`_ and `format`_ kwargs in addition to 
+other writer arguments to function.
+
+To write to a `zarr.Group`_ from a trajectory loaded in MDAnalysis, do::
+
+    import s3fs
+    import zarrtraj
+    import MDAnalysis as mda
+    key = os.getenv('AWS_KEY')
+    secret = os.getenv('AWS_SECRET_KEY')
+    s3 = s3fs.S3FileSystem(key=key, secret=secret)
+    store = s3fs.S3Map(root='<bucket-name>/trajectory.zarrtraj', s3=s3, check=False)
+    root = zarr.open_group(store=store)
+    with mda.Writer(root, u.trajectory.n_atoms, n_frames=u.trajectory.n_frames, format='ZARRTRAJ') as w:
+        for ts in u.trajectory:
+            w.write(u.atoms)
+
+Classes
+-------
+
+.. autoclass:: ZarrTrajReader
+   :members:
+   :inherited-members:
+
+.. autoclass:: ZarrTrajWriter
+   :members:
+   :inherited-members:
+"""
+
+
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.coordinates import base, core
@@ -26,48 +93,6 @@ else:
 
 
 class ZarrTrajReader(base.ReaderBase):
-    r"""
-        Notation:
-            (name) is an Zarr group
-            {name} is an Zarr  group with arbitrary name
-            [variable] is an Zarr array
-            <dtype> is Zarr array datatype
-            +-- is an attribute of a group or Zarr array
-
-            Zarr root
-                \-- (zarrtraj)
-                    +-- version <str>
-                \-- (particles)
-                    \-- (units)
-                        +-- distance <str>
-                        +-- velocity <str>
-                        +-- force <str>
-                        +-- time <str>
-                        +-- angle <str>
-                    \-- {group1}
-                        \-- (box)
-                            \-- (edges)
-                                \-- [step] <int>, gives frame
-                                +-- boundary : <str>, boundary conditions of unit cell
-                                \-- [value] <float>, gives box dimensions
-                                    +-- unit <str>
-                        \-- (position)
-                            \-- [step] <int>, gives frame
-                            \-- [time] <float>, gives time
-                            \-- [value] <float>, gives numpy array of positions
-                                                    with shape (frame, n_atoms, 3)
-                        \-- (velocity)
-                            \-- [step] <int>, gives frame
-                            \-- [time] <float>, gives time
-                            \-- [value] <float>, gives numpy array of velocities
-                                                    with shape (frame, n_atoms, 3)
-                        \-- (force)
-                            \-- [step] <int>, gives frame
-                            \-- [time] <float>, gives time
-                            \-- [value] <float>, gives numpy array of forces
-                                                    with shape (frame, n_atoms, 3)
-    """
-
     format = 'ZARRTRAJ'
 
     # This dictionary is used to translate from Zarrtraj units to MDAnalysis units

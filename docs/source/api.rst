@@ -5,5 +5,4 @@ API Documentation
    :toctree: autosummary
    :recursive:
 
-   zarrtraj-file-spec
-   zarrtraj
+   zarrtraj.ZARRTRAJ

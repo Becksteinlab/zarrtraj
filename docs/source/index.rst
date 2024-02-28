@@ -12,6 +12,7 @@ Welcome to zarrtraj's documentation!
 
    getting_started
    api
+   zarrtraj-file-spec/v1
 
 
 
