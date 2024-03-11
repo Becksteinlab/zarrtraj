@@ -517,7 +517,7 @@ class ZarrTrajWriter(base.WriterBase):
                 raise TypeError("ZarrTrajWriter: Cloud writing requires " +
                                 "'n_frames' kwarg")
             # Determine if chunk size works with memory size
-
+            
             # If not chunk size, choose sensible default that 
             # fits in memory size
             # and takes up >1 mB of memory
