@@ -35,8 +35,8 @@ Example: Writing to cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ZarrTrajWriter can write to AWS, Google Cloud, and Azure Block Storage as well. 
-The writer must be passed the `n_frames`_ and `format`_ kwargs in addition to 
-other writer arguments to function.
+The writer must be passed the `n_frames`_, `format`_, `chunks`_, and `max_memory`_
+kwargs in addition to other writer kwargs to function.
 
 To write to a `zarr.Group`_ from a trajectory loaded in MDAnalysis, do::
 
@@ -48,7 +48,10 @@ To write to a `zarr.Group`_ from a trajectory loaded in MDAnalysis, do::
     s3 = s3fs.S3FileSystem(key=key, secret=secret)
     store = s3fs.S3Map(root='<bucket-name>/trajectory.zarrtraj', s3=s3, check=False)
     root = zarr.open_group(store=store)
-    with mda.Writer(root, u.trajectory.n_atoms, n_frames=u.trajectory.n_frames, format='ZARRTRAJ') as w:
+    with mda.Writer(root, u.trajectory.n_atoms, n_frames=u.trajectory.n_frames, 
+                    chunks=(10, u.trajectory.n_atoms, 3),
+                    max_memory=2**20,
+                    format='ZARRTRAJ') as w:
         for ts in u.trajectory:
             w.write(u.atoms)
 
@@ -524,17 +527,15 @@ class ZarrTrajWriter(base.WriterBase):
             if n_frames is None:
                 raise TypeError("ZarrTrajWriter: Cloud writing requires " +
                                 "'n_frames' kwarg")
-            # Determine if chunk size works with memory size
-            
-            # If not chunk size, choose sensible default that 
-            # fits in memory size
-            # and takes up >1 mB of memory
-            self.chunks = (100, n_atoms, 3)
-            self.n_buffer_frames = self.chunks[0]
-            # NOTE: if buffer ends up being in memory,
-            # n_buffer frames will end up being calculated based on 
-            # number of chunks that can fit in memory, not just chunks arg
+            if max_memory is None:
+                raise TypeError("ZarrTrajWriter: Cloud writing requires " +
+                                "'max_memory' kwarg")
+            self.max_memory = max_memory
 
+            if chunks is None:
+                raise TypeError("ZarrTrajWriter: Cloud writing requires " +
+                                "'chunks' kwarg")
+            self.chunks = chunks
         else:
             self.chunks = (1, n_atoms, 3) if chunks is None else chunks
 
@@ -615,10 +616,14 @@ class ZarrTrajWriter(base.WriterBase):
         # This should only be called once when first timestep is read.
         if self._initial_write:
             self._determine_units(ag)
-            self._initialize_zarr_datasets(ts)
+            self._determine_has(ts)
             if self._is_cloud_storage:
+                self._check_max_memory()
+                self._initialize_zarr_datasets(ts)
                 self._initialize_memory_buffers()
                 self._write_next_timestep = self._write_next_cloud_timestep
+            else:
+                self._initialize_zarr_datasets(ts)
             self._initial_write = False
         return self._write_next_timestep(ts)
     
@@ -659,6 +664,52 @@ class ZarrTrajWriter(base.WriterBase):
                                  "default in MDAnalysis. To write the file "
                                  "with no units, set ``convert_units=False``.")
 
+    def _determine_has(self, ts):
+        # ask the parent file if it has positions, velocities, and forces
+        # if prompted by the writer with the self._write_* attributes
+        self._has = {group: getattr(ts, f'has_{attr}')
+                     if getattr(self, f'_write_{attr}')
+                     else False for group, attr in zip(
+                     ('position', 'velocity', 'force'),
+                     ('positions', 'velocities', 'forces'))}
+        self._has_edges = True if ts.dimensions is not None and np.all(ts.dimensions > 0) else False
+
+    def _check_max_memory(self, ts):
+        """
+        Determines if the provided `chunks`_ size fits in the `max_memory`_
+        sized buffer. If not, the writer will fail without allocating a
+        trajectory.
+        """
+        float32_size = np.dtype(np.float32).itemsize
+        int32_size = np.dtype(np.int32).itemsize
+        mem_per_chunk = 0
+
+        # Write edges, step, and time in the same pattern as
+        # velocity, force, and position, though it is not
+        # strictly necessary for simplicity
+        if self._has_edges:
+            mem_per_chunk += float32_size * self.chunks[0]
+        # Step
+        mem_per_chunk += int32_size * self.chunks[0]
+        # Time
+        mem_per_chunk += float32_size * self.chunks[0]
+
+        if self.has_positions:
+            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms
+
+        if self.has_forces:
+            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms
+
+        if self.has_velocities:
+            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms
+        
+        if mem_per_chunk > self.max_memory:
+            raise ValueError("Requested memory is not enough for " +
+                             "data being written. Try increasing the value " +
+                             "of max_memory")
+        else:
+            self.n_buffer_frames = self.chunks[0] * (self.max_memory // mem_per_chunk)
+
     def _open_file(self):
         if not isinstance(self.filename, zarr.Group):
             raise TypeError("Expected a Zarr group object, but " +
@@ -690,14 +741,7 @@ class ZarrTrajWriter(base.WriterBase):
         # for keeping track of where to write in the dataset
         self._counter = 0
         first_dim = self.n_frames if self.n_frames is not None else 0
-
-        # ask the parent file if it has positions, velocities, and forces
-        # if prompted by the writer with the self._write_* attributes
-        self._has = {group: getattr(ts, f'has_{attr}')
-                     if getattr(self, f'_write_{attr}')
-                     else False for group, attr in zip(
-                     ('position', 'velocity', 'force'),
-                     ('positions', 'velocities', 'forces'))}
+        
         # initialize trajectory group
         self.zarr_group.require_group('particles').require_group('trajectory')
         self._traj = self.zarr_group['particles/trajectory']
@@ -708,7 +752,7 @@ class ZarrTrajWriter(base.WriterBase):
         self._unit_group = self.zarr_group['particles']['units']
 
         self._traj.require_group('box')
-        if ts.dimensions is not None and np.all(ts.dimensions > 0):
+        if self._has_edges:
             self._traj['box'].attrs['boundary'] = 3*['periodic']
             self._traj['box'].require_group('edges')
             self._edges = self._traj.require_dataset('box/edges/value',
@@ -720,14 +764,12 @@ class ZarrTrajWriter(base.WriterBase):
             self._time = self._traj.require_dataset('box/edges/time',
                                                     shape=(first_dim,),
                                                     dtype=np.float32)
-            self._has_edges = True
             self._set_attr_unit('length')
             self._set_attr_unit('time')
         else:
             # if no box, boundary attr must be "none" 
             self._traj['box'].attrs['boundary'] = 3*['none']
             self._create_step_and_time_datasets()
-            self._has_edges = False
 
         if self.has_positions:
             self._create_trajectory_dataset('position')
@@ -809,8 +851,6 @@ class ZarrTrajWriter(base.WriterBase):
         self._unit_group.attrs[unit] = self._unit_translation_dict[unit][self.units[unit]]
 
     def _initialize_memory_buffers(self):
-        # NOTE: chunks may change for time, step, and edges if using
-        # in memory buffer that can fit multiple chunks
         self._time_buffer = np.zeros((self.n_buffer_frames,), dtype=np.float32)
         self._step_buffer = np.zeros((self.n_buffer_frames,), dtype=np.int32)
         self._edges_buffer = np.zeros((self.n_buffer_frames, 3, 3), dtype=np.float32)
@@ -834,7 +874,6 @@ class ZarrTrajWriter(base.WriterBase):
         
         
         """
-        
         i = self._counter
         buffer_index = i % self.n_buffer_frames
         # Add the current timestep information to the buffer
@@ -842,7 +881,7 @@ class ZarrTrajWriter(base.WriterBase):
             curr_step = ts.data['step']
         except KeyError:
             curr_step = ts.frame
-        self._step_buffer[buffer_index] = ts.frame
+        self._step_buffer[buffer_index] = curr_step
         if self._prev_step is not None and curr_step < self._prev_step:
             raise ValueError("The Zarrtraj standard dictates that the step "
                              "dataset must increase monotonically in value.")
@@ -898,7 +937,6 @@ class ZarrTrajWriter(base.WriterBase):
             print(f"Flushing this buffer took {stop-start} seconds")
 
         self._counter += 1
-
 
     def _write_next_timestep(self, ts):
         """Write coordinates and unitcell information to Zarr group.
