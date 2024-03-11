@@ -17,8 +17,8 @@ import os
 import sys
 conda_env = os.getenv('CONDA_PREFIX')
 if conda_env:
-    site_packages_path = os.path.join(conda_env, 'lib', 'python3.x',
-                                      'site-packages', 'site-packages/sphinx')
+    site_packages_path = os.path.join(conda_env, 'lib', 'python3.11',
+                                      'site-packages')
     sys.path.insert(0, site_packages_path)
 
 sys.path.insert(0, os.path.abspath("../.."))
