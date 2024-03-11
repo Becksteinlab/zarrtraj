@@ -1,5 +1,5 @@
 ZarrTraj Specification
-=============================
+======================
 
 The *ZarrTraj* trajectory file format is based on the streamable, compressible
 `Zarr`_ file format.
@@ -51,7 +51,7 @@ Notation
                                             with shape (frame, n_atoms, 3)
 
 Additional Requirements
----------
+-----------------------
 
 * The zarrtraj file must contain at least one of positions, velocities, or forces.
 * All included elements (positions, etc) must be sampled at every frame.
