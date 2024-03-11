@@ -105,11 +105,13 @@ jobs:
 
     - name: codecov
       if: github.repository == 'Becksteinlab/zarrtraj' && github.event_name != 'schedule'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4.0.1
       with:
         file: coverage.xml
         name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
         verbose: True
+        token: ${{ secrets.CODECOV_TOKEN }}
+        slug: Becksteinlab/zarrtraj
 
 
   pylint_check:
