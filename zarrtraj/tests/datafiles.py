@@ -19,6 +19,6 @@ from pathlib import Path
 _data_ref = resources.files('zarrtraj.data')
 
 COORDINATES_ZARRTRAJ = (_data_ref / "test.zarrtraj").as_posix()
-ZARRTRAJ_xvf = (_data_ref / "test_topology.pdb")
+ZARRTRAJ_xvf = (_data_ref / "test_topology.pdb").as_posix()
 
 del resources

@@ -342,18 +342,26 @@ class ZarrTrajReader(base.ReaderBase):
         """assigns values to keys in data dictionary"""
 
         # pulls 'time' and 'step' out of first available parent group
+        time_found = False
+        step_found = False
+
         for name, value in self._has.items():
             if value:
                 if 'time' in self._particle_group[name]:
                     self.ts.time = self._particle_group[name][
                         'time'][self._frame]
                     break
+        if not time_found:
+            self.ts.time = self._particle_group['box']['edges']['time'][self._frame]
+        
         for name, value in self._has.items():
             if value:
                 if 'step' in self._particle_group[name]:
                     self.ts.data['step'] = self._particle_group[name][
                         'step'][self._frame]
                     break
+        if not step_found:
+            self.ts.data['step'] = self._particle_group['box']['edges']['step'][self._frame]
 
     def _read_dataset_into_ts(self, dataset, attribute):
         """reads position, velocity, or force dataset array at current frame
