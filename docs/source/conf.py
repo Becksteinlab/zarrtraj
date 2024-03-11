@@ -15,16 +15,9 @@
 # In case the project was not installed
 import os
 import sys
-conda_env = os.getenv('CONDA_PREFIX')
-if conda_env:
-    site_packages_path = os.path.join(conda_env, 'lib', 'python3.11',
-                                      'site-packages')
-    sys.path.insert(0, site_packages_path)
 
 sys.path.insert(0, os.path.abspath("../.."))
 import zarrtraj  # noqa
-
-
 
 # -- Project information -----------------------------------------------------
 
