@@ -8,6 +8,6 @@ dependencies:
   - python
   - pip
   - mdanalysis-sphinx-theme >=1.0.1
-  - dask
+    # Needed for autodoc
     # Pip-only installs
   #- pip:

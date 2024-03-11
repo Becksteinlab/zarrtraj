@@ -20,6 +20,7 @@ requires-python = ">=3.9"
 dependencies = [
     "MDAnalysis>=2.0.0",
     "zarr>=2.16.1",
+    "dask>=2024.2.1",
 ]
 keywords = [
     "molecular simulations",
