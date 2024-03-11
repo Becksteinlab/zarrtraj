@@ -7,7 +7,7 @@ dependencies:
     # Base depends
   - python
   - pip
-
+  - sphinx
   - mdanalysis-sphinx-theme >=1.0.1
     # Pip-only installs
   #- pip:
