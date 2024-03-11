@@ -8,5 +8,6 @@ dependencies:
   - python
   - pip
   - mdanalysis-sphinx-theme >=1.0.1
+  - dask
     # Pip-only installs
   #- pip:
