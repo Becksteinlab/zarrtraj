@@ -3,15 +3,10 @@
 
 # You can set these variables from the command line.
 SPHINXOPTS    =
-SPHINXBUILD   = $(shell echo $$SPHINXBUILD_ENV)
+SPHINXBUILD   = sphinx-build
 SPHINXPROJ    = zarrtraj
 SOURCEDIR     = source
 BUILDDIR      = _build
-
-# Check if SPHINXBUILD is not set or is empty and throw an error
-ifeq ($(SPHINXBUILD),)
-$(error SPHINXBUILD_ENV environment variable is not set. Please define SPHINXBUILD_ENV with the path to the sphinx-build executable.)
-endif
 
 # Put it first so that "make" without argument is like "make help".
 help:
