@@ -50,6 +50,10 @@ doc = [
 packages = ["zarrtraj"]
 py-modules = ["__init__"]
 
+# Installs tests datafiles
+[tool.setuptools.package-data]
+"zarrtraj" = ["data/*"]
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = [

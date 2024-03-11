@@ -9,7 +9,7 @@ if HAS_ZARR:
     import zarr
 from .utils import make_Universe
 import pytest
-from zarrtraj.data.files import COORDINATES_ZARRTRAJ#, ZARRTRAJ_xvf
+from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ#, ZARRTRAJ_xvf
 from numpy.testing import assert_equal, assert_almost_equal, assert_allclose
 from MDAnalysisTests.datafiles import (TPR_xvf, TRR_xvf,
                                        COORDINATES_TOPOLOGY)

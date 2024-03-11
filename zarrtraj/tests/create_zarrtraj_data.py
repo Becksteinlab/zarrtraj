@@ -1,5 +1,5 @@
 import zarrtraj
-from zarrtraj.data.files import ZARRTRAJ_xvf
+from zarrtraj.tests.datafiles import ZARRTRAJ_xvf
 import zarr
 import MDAnalysis as mda
 import numpy as np
