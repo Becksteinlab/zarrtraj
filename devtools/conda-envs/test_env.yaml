@@ -4,19 +4,17 @@ channels:
   - conda-forge
 dependencies:
   # Base depends
-  - python
+  - python>=3.9
   - pip
 
   # Testing
-  - pytest
-  - pytest-cov
-  - pytest-xdist
+  - pytest>=8.1.1
+  - pytest-xdist>=3.5.0
+  - pytest-cov>=4.1.0
 
   # MDAKit Development requires
-  - MDAnalysisData
-  - h5py
   - pandas
-  - MDAnalysisTests
+  - MDAnalysisTests>=2.7.0
   - dask
 
   # MDAKit requires
@@ -27,5 +25,5 @@ dependencies:
   # Pip-only installs
   - pip:
     - codecov
-    - MDAnalysis
+    - MDAnalysis>=2.7.0
 
