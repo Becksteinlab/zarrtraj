@@ -20,7 +20,7 @@ concurrency:
 
 defaults:
   run:
-    shell: bash  -l {0} 
+    shell: bash -l {0} 
 
 jobs:
   environment-config:

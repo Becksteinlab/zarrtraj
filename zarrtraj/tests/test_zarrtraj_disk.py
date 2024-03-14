@@ -1,27 +1,15 @@
 """
-Unit and regression test for the zarrtraj package.
+Unit and regression test for the zarrtraj package when the zarr group is on-disk.
 """
 
-# Import package, test suite, and other packages as needed
 import zarrtraj
 from zarrtraj import HAS_ZARR
 if HAS_ZARR:
     import zarr
-from .utils import make_Universe
+from MDAnalysisTests.dummy import make_Universe
 import pytest
 from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ#, ZARRTRAJ_xvf
 from numpy.testing import assert_equal, assert_almost_equal, assert_allclose
-
-# here we attempt to find out why MDAnalysisTests.coordinates does not exist in macos python 3.10 on mda develop branch
-import pkgutil
-import MDAnalysisTests
-def print_submodules(module):
-    print(f"Submodules of {module.__name__}:")
-    for importer, modname, ispkg in pkgutil.iter_modules(module.__path__):
-        print(f"- {modname} {'(package)' if ispkg else ''}")
-
-print_submodules(MDAnalysisTests)
-
 from MDAnalysisTests.datafiles import (TPR_xvf, TRR_xvf,
                                        COORDINATES_TOPOLOGY)
 from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
