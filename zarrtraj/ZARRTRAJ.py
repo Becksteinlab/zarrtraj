@@ -246,6 +246,8 @@ class ZarrTrajReader(base.ReaderBase):
 
     def open_trajectory(self):
         """opens the trajectory file using zarr library"""
+        if not self.filename:
+            raise PermissionError("The Zarr group is not readable")
         self._frame = -1
         self._file = self.filename
         # pulls first key out of 'particles'

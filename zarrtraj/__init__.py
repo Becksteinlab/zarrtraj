@@ -16,7 +16,6 @@ import zarr
 
 print("importing zarrtraj...")
 
-@staticmethod
 def _format_hint(thing):
     return (not isinstance(thing, np.ndarray) and
             not isinstance(thing, zarr.Group) and
