@@ -12,6 +12,7 @@ import pytest
 from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ#, ZARRTRAJ_xvf
 from numpy.testing import assert_equal, assert_almost_equal, assert_allclose
 import MDAnalysis as mda
+from MDAnalysis.coordinates.base import FrameIteratorBase
 import MDAnalysisTests
 from MDAnalysisTests.datafiles import (TPR_xvf, TRR_xvf,
                                        COORDINATES_TOPOLOGY)
