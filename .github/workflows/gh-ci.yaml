@@ -68,7 +68,7 @@ jobs:
         add-pip-as-python-dependency: true
         architecture: x64
 
-        channels: defaults,conda-forge
+        channels: defaults
 
         activate-environment: zarrtraj-test
         auto-update-conda: true
