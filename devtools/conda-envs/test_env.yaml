@@ -14,12 +14,9 @@ dependencies:
   - codecov
 
   # MDAKit Development requires
-  - pandas
-  - MDAnalysisTests>=2.7.0
   - dask
 
   # MDAKit requires
-  - MDAnalysis>=2.7.0
   - zarr
   - fsspec # Only needed for web services connections
   - s3fs # Onle needed for AWS integration
