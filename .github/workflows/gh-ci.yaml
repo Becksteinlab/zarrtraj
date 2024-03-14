@@ -81,8 +81,8 @@ jobs:
       with:
         version: ${{ matrix.mdanalysis-version }}
         install-tests: true
-        installer:  pip 
-        shell: bash  -l {0} 
+        installer:  conda
+        shell: bash -l {0} 
       
     - name: Install package
       run: |
