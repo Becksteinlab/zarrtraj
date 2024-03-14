@@ -4,13 +4,14 @@ channels:
   - conda-forge
 dependencies:
   # Base depends
-  - python>=3.9
+  - python==3.10
   - pip
 
   # Testing
-  - pytest>=8.1.1
+  - pytest>=7.4.0
   - pytest-xdist>=3.5.0
   - pytest-cov>=4.1.0
+  - codecov
 
   # MDAKit Development requires
   - pandas
@@ -18,12 +19,12 @@ dependencies:
   - dask
 
   # MDAKit requires
+  - MDAnalysis>=2.7.0
   - zarr
   - fsspec # Only needed for web services connections
   - s3fs # Onle needed for AWS integration
 
   # Pip-only installs
-  - pip:
-    - codecov
-    - MDAnalysis>=2.7.0
+  # - pip:
+
 
