@@ -36,8 +36,7 @@ test = [
     "pytest-xdist>=3.5.0",
     "pytest-cov>=4.1.0",
     "MDAnalysisTests>=2.7.0",
-    "fsspec",
-    "s3fs",
+    "s3fs=2024.3.0",
 ]
 doc = [
     "sphinx",

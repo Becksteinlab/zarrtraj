@@ -1,0 +1,166 @@
+"""
+Unit and regression test for the zarrtraj package when the zarr group is 
+in an AWS S3 bucket
+"""
+
+import pytest
+import os
+from moto import mock_aws
+# While debugging and server is running, visit http://localhost:5000/moto-api
+from moto.server import ThreadedMotoServer
+import boto3
+import s3fs
+
+import zarrtraj
+from zarrtraj import HAS_ZARR
+if HAS_ZARR:
+    import zarr
+from MDAnalysisTests.dummy import make_Universe
+from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ#, ZARRTRAJ_xvf
+from numpy.testing import assert_equal, assert_almost_equal, assert_allclose
+from MDAnalysisTests.datafiles import (TPR_xvf, TRR_xvf,
+                                       COORDINATES_TOPOLOGY)
+from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
+                                              BaseReference, BaseWriterTest,
+                                              assert_timestep_almost_equal)
+import sys
+
+
+# Only call this once a Moto Server is running
+def zarr_file_to_s3_bucket(fname):
+    
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"
+    os.environ["AWS_SESSION_TOKEN"] = "testing"
+
+    # Using boto3.resource rather than .client since we don't
+    # Need granular control
+    s3_resource = boto3.resource(
+        "s3",
+        region_name="us-east-1",
+        endpoint_url="http://localhost:5000"
+    )
+    s3_resource.create_bucket(Bucket="testbucket")
+
+    source = zarr.open_group(fname, mode='r')
+
+    s3_fs = s3fs.S3FileSystem(
+        anon=False,
+        client_kwargs=dict(
+            region_name='us-east-1',
+            endpoint_url="http://localhost:5000"
+        )
+    )
+    cloud_store = s3fs.S3Map(
+        root=f'testbucket/{os.path.basename(fname)}',
+        s3=s3_fs,
+        check=False
+    )
+
+    zarr.convenience.copy_store(source.store, cloud_store)
+
+    cloud_dest = zarr.open_group(store=cloud_store, mode='a')
+    return cloud_dest
+
+
+
+@pytest.mark.skipif(not HAS_ZARR, reason="Zarr not installed")
+class ZARRTRAJAWSReference(BaseReference):
+    """Reference synthetic trajectory that was
+    copied from test_xdr.TRRReference"""
+    def __init__(self):
+        super(ZARRTRAJAWSReference, self).__init__()
+        # self.trajectory already setup in setup_class
+        self.trajectory = zarr_file_to_s3_bucket(COORDINATES_ZARRTRAJ)
+        self.topology = COORDINATES_TOPOLOGY
+        self.reader = zarrtraj.ZarrTrajReader
+        self.writer = zarrtraj.ZarrTrajWriter
+        self.ext = 'zarrtraj'
+        self.prec = 3
+        self.changing_dimensions = True
+
+        self.first_frame.velocities = self.first_frame.positions / 10
+        self.first_frame.forces = self.first_frame.positions / 100
+
+        self.second_frame.velocities = self.second_frame.positions / 10
+        self.second_frame.forces = self.second_frame.positions / 100
+
+        self.last_frame.velocities = self.last_frame.positions / 10
+        self.last_frame.forces = self.last_frame.positions / 100
+
+        self.jump_to_frame.velocities = self.jump_to_frame.positions / 10
+        self.jump_to_frame.forces = self.jump_to_frame.positions / 100
+
+    def iter_ts(self, i):
+        ts = self.first_frame.copy()
+        ts.positions = 2**i * self.first_frame.positions
+        ts.velocities = ts.positions / 10
+        ts.forces = ts.positions / 100
+        ts.time = i
+        ts.frame = i
+        return ts
+    
+
+@pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
+class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
+    """Tests ZarrTrajReader with with synthetic trajectory."""
+
+    @pytest.fixture()(autouse=True)
+    def run_server(self):
+        self.server = ThreadedMotoServer()
+        self.server.start()
+        yield
+        self.server.stop()
+    
+    @staticmethod
+    @pytest.fixture()
+    def ref(self):
+        yield ZARRTRAJAWSReference()
+
+
+    def test_get_writer_1(self, ref, reader, tmpdir):
+        with tmpdir.as_cwd():
+            outfile = zarr.open_group('test-writer' + ref.ext, 'a')
+            with reader.Writer(outfile) as W:
+                assert_equal(isinstance(W, ref.writer), True)
+                assert_equal(W.n_atoms, reader.n_atoms)
+
+    def test_get_writer_2(self, ref, reader, tmpdir):
+        with tmpdir.as_cwd():
+            outfile = zarr.open_group('test-writer' + ref.ext, 'a')
+            with reader.Writer(outfile, n_atoms=100) as W:
+                assert_equal(isinstance(W, ref.writer), True)
+                assert_equal(W.n_atoms, 100)
+
+    def test_copying(self, ref, reader):
+        original = zarrtraj.ZarrTrajReader(
+                ref.trajectory, convert_units=False, dt=2,
+                time_offset=10, foo="bar")
+        copy = original.copy()
+
+        assert original.format not in ('MEMORY', 'CHAIN')
+        assert original.convert_units is False
+        assert copy.convert_units is False
+        assert original._ts_kwargs['time_offset'] == 10
+        assert copy._ts_kwargs['time_offset'] == 10
+        assert original._ts_kwargs['dt'] == 2
+        assert copy._ts_kwargs['dt'] == 2
+
+        assert original.ts.data['time_offset'] == 10
+        assert copy.ts.data['time_offset'] == 10
+
+        assert original.ts.data['dt'] == 2
+        assert copy.ts.data['dt'] == 2
+
+        assert copy._kwargs['foo'] == 'bar'
+
+        # check coordinates
+        assert original.ts.frame == copy.ts.frame
+        assert_allclose(original.ts.positions, copy.ts.positions)
+
+        original.next()
+        copy.next()
+
+        assert original.ts.frame == copy.ts.frame
+        assert_allclose(original.ts.positions, copy.ts.positions)
