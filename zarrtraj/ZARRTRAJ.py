@@ -673,7 +673,7 @@ class ZarrTrajWriter(base.WriterBase):
                      ('positions', 'velocities', 'forces'))}
         self._has_edges = True if ts.dimensions is not None and np.all(ts.dimensions > 0) else False
 
-    def _check_max_memory(self, ts):
+    def _check_max_memory(self):
         """
         Determines if the provided `chunks`_ size fits in the `max_memory`_
         sized buffer. If not, the writer will fail without allocating a
@@ -687,20 +687,20 @@ class ZarrTrajWriter(base.WriterBase):
         # velocity, force, and position, though it is not
         # strictly necessary for simplicity
         if self._has_edges:
-            mem_per_chunk += float32_size * self.chunks[0]
+            mem_per_chunk += float32_size * self.chunks[0] * 9
         # Step
         mem_per_chunk += int32_size * self.chunks[0]
         # Time
         mem_per_chunk += float32_size * self.chunks[0]
 
         if self.has_positions:
-            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms
+            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
 
         if self.has_forces:
-            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms
+            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
 
         if self.has_velocities:
-            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms
+            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
         
         if mem_per_chunk > self.max_memory:
             raise ValueError("Requested memory is not enough for " +
