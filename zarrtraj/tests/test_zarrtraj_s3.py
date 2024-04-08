@@ -16,8 +16,9 @@ from zarrtraj import HAS_ZARR
 if HAS_ZARR:
     import zarr
 from MDAnalysisTests.dummy import make_Universe
-from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ#, ZARRTRAJ_xvf
+from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ, ZARRTRAJ_xvf
 from numpy.testing import assert_equal, assert_almost_equal, assert_allclose
+import MDAnalysis as mda
 from MDAnalysisTests.datafiles import (TPR_xvf, TRR_xvf,
                                        COORDINATES_TOPOLOGY)
 from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
@@ -98,6 +99,13 @@ def new_zarrgroup_in_bucket(fname):
 
     return cloud_dest
 
+# Helper function to calculate the memory usage of a writer at a frame
+def get_memory_usage(writer):
+    mem = (writer._time_buffer.nbytes + writer._step_buffer.nbytes + 
+           writer._edges_buffer.nbytes + writer._pos_buffer.nbytes + 
+           writer._force_buffer.nbytes + writer._vel_buffer.nbytes)
+    return mem
+
 @pytest.mark.skipif(not HAS_ZARR, reason="Zarr not installed")
 class ZARRTRAJAWSReference(BaseReference):
     """Reference synthetic trajectory that was
@@ -155,6 +163,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
     @pytest.fixture()
     def ref():
         yield ZARRTRAJAWSReference()
+
 
 
     def test_get_writer_1(self, ref, reader, tmpdir):
@@ -347,7 +356,6 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
                     w.write(universe)
                     # Each frame of synthetic trajectory should be 224 bytes
                     assert get_memory_usage(w) <= 224
-
 
 # Helper Functions
 def get_memory_usage(writer):
