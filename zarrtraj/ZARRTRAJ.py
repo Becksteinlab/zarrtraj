@@ -211,7 +211,7 @@ class ZarrTrajReader(base.ReaderBase):
         except KeyError:
             raise RuntimeError(errmsg.format(
                                 unit, self._file['particles'][
-                                    'units'].attrs['time'])
+                                    'units'].attrs[unit])
                                ) from None
         
     def _check_units(self, group, unit):
@@ -411,7 +411,6 @@ class ZarrTrajReader(base.ReaderBase):
 
     def Writer(self, filename, n_atoms=None, **kwargs):
         """Return writer for trajectory format
-        
         """
         if n_atoms is None:
             n_atoms = self.n_atoms
@@ -526,14 +525,9 @@ class ZarrTrajWriter(base.WriterBase):
             if n_frames is None:
                 raise TypeError("ZarrTrajWriter: Cloud writing requires " +
                                 "'n_frames' kwarg")
-            if max_memory is None:
-                raise TypeError("ZarrTrajWriter: Cloud writing requires " +
-                                "'max_memory' kwarg")
-            self.max_memory = max_memory
+            # Default buffer size is 1MB
+            self.max_memory = 2**20 if max_memory is None else max_memory
 
-            if chunks is None:
-                raise TypeError("ZarrTrajWriter: Cloud writing requires " +
-                                "'chunks' kwarg")
             self.chunks = chunks
         else:
             self.chunks = (1, n_atoms, 3) if chunks is None else chunks
@@ -617,6 +611,7 @@ class ZarrTrajWriter(base.WriterBase):
             self._determine_units(ag)
             self._determine_has(ts)
             if self._is_cloud_storage:
+                self._determine_chunks()
                 self._check_max_memory()
                 self._initialize_zarr_datasets(ts)
                 self._initialize_memory_buffers()
@@ -675,9 +670,9 @@ class ZarrTrajWriter(base.WriterBase):
 
     def _check_max_memory(self):
         """
-        Determines if the provided `chunks`_ size fits in the `max_memory`_
-        sized buffer. If not, the writer will fail without allocating a
-        trajectory.
+        Determines if at least one chunk of size ``chunks`` fits in the ``max_memory``
+        sized buffer. If not, the writer will fail without allocating space for
+        the trajectory on the cloud.
         """
         float32_size = np.dtype(np.float32).itemsize
         int32_size = np.dtype(np.int32).itemsize
@@ -703,11 +698,55 @@ class ZarrTrajWriter(base.WriterBase):
             mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
         
         if mem_per_chunk > self.max_memory:
-            raise ValueError("Requested memory is not enough for " +
-                             "data being written. Try increasing the value " +
-                             "of max_memory")
+            raise ValueError(f"`max_memory` kwarg " +
+                             "must be at least {mem_per_chunk} for " +
+                             "chunking pattern of {self.chunks}")
         else:
-            self.n_buffer_frames = self.chunks[0] * (self.max_memory // mem_per_chunk)
+            self.n_buffer_frames = self.chunks[0] * (self.max_memory // 
+                                                     mem_per_chunk)
+    
+    def _determine_chunks(self):
+        """
+        If ``chunks`` is not provided as a `kwarg` to the writer in the case
+        of cloud writing, this method will determine a default
+        chunking strategy of 1 MB per chunk based on the `zarr`
+        reccomendation of >= 1mb per chunk.
+        """
+        if self.chunks:
+            return
+
+        float32_size = np.dtype(np.float32).itemsize
+        int32_size = np.dtype(np.int32).itemsize
+        mem_per_frame = 0
+        default_buffer_size = 0
+
+        if self._has_edges:
+            mem_per_frame += float32_size * 9
+        # Step
+        mem_per_frame += int32_size
+        # Time
+        mem_per_frame += float32_size
+
+        if self.has_positions:
+            mem_per_frame += float32_size * self.n_atoms * 3
+            default_buffer_size += 2**20
+
+        if self.has_forces:
+            mem_per_frame += float32_size * self.n_atoms * 3
+            default_buffer_size += 2**20
+
+        if self.has_velocities:
+            mem_per_frame += float32_size * self.n_atoms * 3
+            default_buffer_size += 2**20
+
+        if mem_per_frame <= default_buffer_size:
+            frames_per_chunk = default_buffer_size // mem_per_frame
+            self.chunks = (frames_per_chunk, self.n_atoms, 3)
+        else:
+            raise TypeError(f"Trajectory frame cannot fit in " +
+                            "default buffer size of 1MB per " +
+                            "(position, force, or velocity frame)")
+
 
     def _open_file(self):
         if not isinstance(self.filename, zarr.Group):
@@ -727,7 +766,7 @@ class ZarrTrajWriter(base.WriterBase):
     def _initialize_zarr_datasets(self, ts):
         """initializes all datasets that will be written to by
         :meth:`_write_next_timestep`. Datasets must be sampled at the same
-        rate in version 1.0 of zarrtraj
+        rate in version 0.0.0 of zarrtraj
 
         Note
         ----
@@ -1006,3 +1045,23 @@ class ZarrTrajWriter(base.WriterBase):
     def has_forces(self):
         """``True`` if writer is writing forces from Timestep."""
         return self._has['force']
+
+### Developer utils ###
+def get_frame_size(universe):
+    ts = universe.trajectory[0]
+    float32_size = np.dtype(np.float32).itemsize
+    int32_size = np.dtype(np.int32).itemsize
+    mem_per_frame = 0
+    if ts.triclinic_dimensions:
+        mem_per_frame += float32_size * 9
+    if ts.frame:
+        mem_per_frame += int32_size
+    if ts.time:
+        mem_per_frame += float32_size
+    if ts.positions:
+        mem_per_frame += float32_size * universe.n_atoms * 3
+    if ts.forces:
+        mem_per_frame += float32_size * universe.n_atoms * 3
+    if ts.velocities:
+        mem_per_frame += float32_size * universe.n_atoms * 3
+    return mem_per_frame
