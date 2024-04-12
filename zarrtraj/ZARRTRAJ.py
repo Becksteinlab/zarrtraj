@@ -916,12 +916,9 @@ class ZarrTrajWriter(base.WriterBase):
             else:
                 self._force_buffer[buffer_index, :] = ts.forces
             
-        stop = time.time()
-        print(f"Writing to the buffer took {stop-start} seconds")
         # If buffer is full or last write call, write buffer to cloud
         if (((i + 1) % self.n_buffer_frames == 0) or
                 (i == self.n_frames - 1)):
-            start = time.time()
             da.from_array(self._step_buffer[:buffer_index + 1]).to_zarr(self._step, region=(slice(i - buffer_index, i + 1),), return_stored=True)
             da.from_array(self._time_buffer[:buffer_index + 1]).to_zarr(self._time, region=(slice(i - buffer_index, i + 1),))
             if self._has_edges:
@@ -932,8 +929,6 @@ class ZarrTrajWriter(base.WriterBase):
                 da.from_array(self._vel_buffer[:buffer_index + 1]).to_zarr(self._vel, region=(slice(i - buffer_index, i + 1),))
             if self.has_forces:
                 da.from_array(self._force_buffer[:buffer_index + 1]).to_zarr(self._force, region=(slice(i - buffer_index, i + 1),))
-            stop = time.time()
-            print(f"Flushing this buffer took {stop-start} seconds")
 
         self._counter += 1
 
@@ -956,10 +951,7 @@ class ZarrTrajWriter(base.WriterBase):
         # to use. However, step is also necessary in Zarrtraj to allow
         # temporal matching of the data, so ts.frame is used as an alternative
         new_shape = (self._step.shape[0] + 1,) + self._step.shape[1:]
-        print(self._step.shape)
         self._step.resize(new_shape)
-        print(self._step.shape)
-        print(self._step[:])
         try:
             self._step[i] = ts.data['step']
         except KeyError:
