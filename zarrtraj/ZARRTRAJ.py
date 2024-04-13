@@ -4,7 +4,7 @@ Example: Loading a .zarrtraj file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To load a ZarrTraj simulation from a .zarrtraj trajectory file, pass a topology file
-and a `zarr.Group`_ object to :class:`~MDAnalysis.core.universe.Universe`::
+and a `zarr.Group` object to :class:`~MDAnalysis.core.universe.Universe`::
 
     import zarrtraj
     import MDAnalysis as mda
@@ -35,10 +35,10 @@ Example: Writing to cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ZarrTrajWriter can write to AWS, Google Cloud, and Azure Block Storage as well. 
-The writer must be passed the `n_frames`_, `format`_, `chunks`_, and `max_memory`_
+The writer must be passed the `n_frames`, `format`, `chunks`, and `max_memory`
 kwargs in addition to other writer kwargs to function.
 
-To write to a `zarr.Group`_ from a trajectory loaded in MDAnalysis, do::
+To write to a `zarr.Group` from a trajectory loaded in MDAnalysis, do::
 
     import s3fs
     import zarrtraj
@@ -155,13 +155,15 @@ class ZarrTrajReader(base.ReaderBase):
         
         # _has dictionary used for checking whether zarrtraj file has
         # 'position', 'velocity', or 'force' groups in the file
+        # IO CALL
         self._has = {name: name in self._particle_group for
                      name in ('position', 'velocity', 'force')}
-        
+        # IO CALL
         self._has_edges = 'edges' in self._particle_group['box']
         
         # Gets some info about what settings the datasets were created with
         # from first available group
+        # IO CALLS
         for name, value in self._has.items():
             if value:
                 dset = self._particle_group[f'{name}/value']
@@ -185,6 +187,17 @@ class ZarrTrajReader(base.ReaderBase):
         self._set_translated_units()  # fills units dictionary
         self._read_next_timestep()
 
+    def open_trajectory(self):
+        """opens the trajectory file using zarr library"""
+        if not self.filename:
+            raise PermissionError("The Zarr group is not readable")
+        self._frame = -1
+        self._file = self.filename
+        # pulls first key out of 'particles'
+        # allows for arbitrary name of group1 in 'particles'
+        self._particle_group = self._file['particles'][
+            list(self._file['particles'])[0]]
+
     def _set_translated_units(self):
         """converts units from ZARRTRAJ to MDAnalysis notation
         and fills units dictionary"""
@@ -197,22 +210,23 @@ class ZarrTrajReader(base.ReaderBase):
                             }
 
         for group, unit in _group_unit_dict.items():
-            self._translate_zarrtraj_units(unit)
+            self._translate_zarrtraj_units(group, unit)
             self._check_units(group, unit)
 
-    def _translate_zarrtraj_units(self, unit):
+    def _translate_zarrtraj_units(self, group, unit):
         """stores the translated unit string into the units dictionary"""
 
         errmsg = "{} unit '{}' is not recognized by ZarrTrajReader."
 
-        try:
-            self.units[unit] = self._unit_translation[unit][
-                self._file['particles']['units'].attrs[unit]]
-        except KeyError:
-            raise RuntimeError(errmsg.format(
-                                unit, self._file['particles'][
-                                    'units'].attrs[unit])
-                               ) from None
+        if unit == 'time' or self._has[group]:
+            try:
+                self.units[unit] = self._unit_translation[unit][
+                    self._file['particles']['units'].attrs[unit]]
+            except KeyError:
+                raise RuntimeError(errmsg.format(
+                                    unit, self._file['particles'][
+                                        'units'].attrs[unit])
+                                ) from None
         
     def _check_units(self, group, unit):
         """Raises error if no units are provided from Zarrtraj file
@@ -233,56 +247,11 @@ class ZarrTrajReader(base.ReaderBase):
             if self._has[group]:
                 if self.units[unit] is None:
                     raise ValueError(errmsg)
+                
+    def _read_next_timestep(self):
+        """read next frame in trajectory"""
+        return self._read_frame(self._frame + 1)
 
-    @staticmethod
-    def _format_hint(thing):
-        """Can this Reader read *thing*"""
-        # Check if the object is already a zarr.Group
-        # If it isn't, try opening it as a group and if it excepts, return False
-        if not HAS_ZARR or not isinstance(thing, zarr.Group):
-            return False
-        else:
-            return True
-
-    def open_trajectory(self):
-        """opens the trajectory file using zarr library"""
-        if not self.filename:
-            raise PermissionError("The Zarr group is not readable")
-        self._frame = -1
-        self._file = self.filename
-        # pulls first key out of 'particles'
-        # allows for arbitrary name of group1 in 'particles'
-        self._particle_group = self._file['particles'][
-            list(self._file['particles'])[0]]
-
-    @staticmethod
-    def parse_n_atoms(filename, storage_options=None):
-        for group in filename['particles/trajectory']:
-            if group in ('position', 'velocity', 'force'):
-                n_atoms = filename[f'particles/trajectory/{group}/value'].shape[1]
-                return n_atoms
-
-        raise NoDataError("Could not construct minimal topology from the "
-                        "Zarrtraj trajectory file, as it did not contain a "
-                        "'position', 'velocity', or 'force' group. "
-                        "You must include a topology file.")
-
-    def close(self):
-        """close reader"""
-        self._file.store.close()
-    
-    def _reopen(self):
-        """reopen trajectory"""
-        self.close()
-        self.open_trajectory()
-
-    @property
-    def n_frames(self):
-        """number of frames in trajectory"""
-        for name, value in self._has.items():
-            if value:
-                return self._particle_group[name]['value'].shape[0]
-            
     def _read_frame(self, frame):
         """reads data from zarrtraj file and copies to current timestep"""
         try:
@@ -363,6 +332,7 @@ class ZarrTrajReader(base.ReaderBase):
                         'step'][self._frame]
                     break
         if not step_found:
+ 
             self.ts.data['step'] = self._particle_group['box']['edges']['step'][self._frame]
 
     def _read_dataset_into_ts(self, dataset, attribute):
@@ -405,16 +375,50 @@ class ZarrTrajReader(base.ReaderBase):
         if self._has['force']:
             self.convert_forces_from_native(self.ts.forces)
 
-    def _read_next_timestep(self):
-        """read next frame in trajectory"""
-        return self._read_frame(self._frame + 1)
+    @staticmethod
+    def _format_hint(thing):
+        """Can this Reader read *thing*"""
+        # Check if the object is already a zarr.Group
+        # If it isn't, try opening it as a group and if it excepts, return False
+        if not HAS_ZARR or not isinstance(thing, zarr.Group):
+            return False
+        else:
+            return True
+
+    @staticmethod
+    def parse_n_atoms(filename, storage_options=None):
+        for group in filename['particles/trajectory']:
+            if group in ('position', 'velocity', 'force'):
+                n_atoms = filename[f'particles/trajectory/{group}/value'].shape[1]
+                return n_atoms
+
+        raise NoDataError("Could not construct minimal topology from the "
+                        "Zarrtraj trajectory file, as it did not contain a "
+                        "'position', 'velocity', or 'force' group. "
+                        "You must include a topology file.")
+
+    def close(self):
+        """close reader"""
+        self._file.store.close()
+    
+    def _reopen(self):
+        """reopen trajectory"""
+        self.close()
+        self.open_trajectory()
+
+    @property
+    def n_frames(self):
+        """number of frames in trajectory"""
+        for name, value in self._has.items():
+            if value:
+                return self._particle_group[name]['value'].shape[0]
 
     def Writer(self, filename, n_atoms=None, **kwargs):
         """Return writer for trajectory format
         """
         if n_atoms is None:
             n_atoms = self.n_atoms
-        kwargs.setdefault('format', "ZARRTRAJ") # NOTE: change main codebase to recognize zarr grps
+        kwargs.setdefault('format', "ZARRTRAJ")
         kwargs.setdefault('compressor', self.compressor)
         kwargs.setdefault('positions', self.has_positions)
         kwargs.setdefault('velocities', self.has_velocities)
@@ -526,7 +530,7 @@ class ZarrTrajWriter(base.WriterBase):
                 raise TypeError("ZarrTrajWriter: Cloud writing requires " +
                                 "'n_frames' kwarg")
             # Default buffer size is 1MB
-            self.max_memory = 2**20 if max_memory is None else max_memory
+            self.max_memory = 10485760 if max_memory is None else max_memory
 
             self.chunks = chunks
         else:
@@ -554,6 +558,20 @@ class ZarrTrajWriter(base.WriterBase):
                            'velocity': velocityunit,
                            'force': forceunit}
         self._initial_write = True
+
+    def _open_file(self):
+        if not isinstance(self.filename, zarr.Group):
+            raise TypeError("Expected a Zarr group object, but " +
+                            "received an instance of type {}"
+                            .format(type(self.filename).__name__))
+        # Verify group is open for writing
+        if not self.filename.store.is_writeable():
+            raise PermissionError("The Zarr group is not writeable")
+        self.zarr_group = self.filename
+
+        # fill in Zarrtraj metadata from kwargs
+        self.zarr_group.require_group('zarrtraj')
+        self.zarr_group['zarrtraj'].attrs['version'] = self.ZARRTRAJ_VERSION
 
     def _determine_if_cloud_storage(self):
         # Check if we are working with a cloud storage type
@@ -674,6 +692,7 @@ class ZarrTrajWriter(base.WriterBase):
         sized buffer. If not, the writer will fail without allocating space for
         the trajectory on the cloud.
         """
+
         float32_size = np.dtype(np.float32).itemsize
         int32_size = np.dtype(np.int32).itemsize
         mem_per_chunk = 0
@@ -709,58 +728,29 @@ class ZarrTrajWriter(base.WriterBase):
         """
         If ``chunks`` is not provided as a `kwarg` to the writer in the case
         of cloud writing, this method will determine a default
-        chunking strategy of 1 MB per chunk based on the `zarr`
-        reccomendation of >= 1mb per chunk.
+        chunking strategy of 10 MB per sum total of 
+        position, force, velocity, step, and time chunks
+        based on the `zarr` reccomendation of >= 1mb per chunk.
         """
         if self.chunks:
             return
 
         float32_size = np.dtype(np.float32).itemsize
         int32_size = np.dtype(np.int32).itemsize
-        mem_per_frame = 0
-        default_buffer_size = 0
 
-        if self._has_edges:
-            mem_per_frame += float32_size * 9
-        # Step
-        mem_per_frame += int32_size
-        # Time
-        mem_per_frame += float32_size
-
-        if self.has_positions:
-            mem_per_frame += float32_size * self.n_atoms * 3
-            default_buffer_size += 2**20
-
-        if self.has_forces:
-            mem_per_frame += float32_size * self.n_atoms * 3
-            default_buffer_size += 2**20
-
-        if self.has_velocities:
-            mem_per_frame += float32_size * self.n_atoms * 3
-            default_buffer_size += 2**20
-
-        if mem_per_frame <= default_buffer_size:
-            frames_per_chunk = default_buffer_size // mem_per_frame
-            self.chunks = (frames_per_chunk, self.n_atoms, 3)
-        else:
-            raise TypeError(f"Trajectory frame cannot fit in " +
-                            "default buffer size of 1MB per " +
-                            "(position, force, or velocity frame)")
-
-
-    def _open_file(self):
-        if not isinstance(self.filename, zarr.Group):
-            raise TypeError("Expected a Zarr group object, but " +
-                            "received an instance of type {}"
-                            .format(type(self.filename).__name__))
-        # Verify group is open for writing
-        if not self.filename.store.is_writeable():
-            raise PermissionError("The Zarr group is not writeable")
-        self.zarr_group = self.filename
-
-        # fill in Zarrtraj metadata from kwargs
-        self.zarr_group.require_group('zarrtraj')
-        self.zarr_group['zarrtraj'].attrs['version'] = self.ZARRTRAJ_VERSION
+        n_data_buffers = (self.has_positions + self.has_velocities + self.has_forces)
+        if n_data_buffers:
+            data_buffer_size = (10485760 - (float32_size * 9) -
+                                int32_size - float32_size) // n_data_buffers
+            mem_per_buffer = float32_size * self.n_atoms * 3
+            if mem_per_buffer <= data_buffer_size:
+                mem_per_frame = (n_data_buffers * mem_per_buffer +
+                                 (float32_size * 9) + int32_size + 
+                                 float32_size)
+                self.chunks = (10485760 // mem_per_frame, self.n_atoms, 3)
+            else:
+                raise TypeError(f"Trajectory frame cannot fit in " +
+                                "default buffer size of 10MB")
 
 
     def _initialize_zarr_datasets(self, ts):
@@ -1052,16 +1042,16 @@ def get_frame_size(universe):
     float32_size = np.dtype(np.float32).itemsize
     int32_size = np.dtype(np.int32).itemsize
     mem_per_frame = 0
-    if ts.triclinic_dimensions:
-        mem_per_frame += float32_size * 9
-    if ts.frame:
-        mem_per_frame += int32_size
-    if ts.time:
-        mem_per_frame += float32_size
-    if ts.positions:
-        mem_per_frame += float32_size * universe.n_atoms * 3
-    if ts.forces:
-        mem_per_frame += float32_size * universe.n_atoms * 3
-    if ts.velocities:
-        mem_per_frame += float32_size * universe.n_atoms * 3
+    # dimension
+    mem_per_frame += float32_size * 9
+    # frame
+    mem_per_frame += int32_size
+    # time
+    mem_per_frame += float32_size
+    if ts.has_positions:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    if ts.has_forces:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    if ts.has_velocities:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
     return mem_per_frame
