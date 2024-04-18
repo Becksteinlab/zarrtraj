@@ -1,0 +1,98 @@
+ZarrTraj Specification
+======================
+
+The *ZarrTraj* trajectory file format is based on the streamable, compressible
+`Zarr` file format.
+
+Units
+-----
+
+.. list-table
+   :widths: 25 25 25
+   :header-rows: 1
+
+   * - Quantity
+     - Unit
+     - Abbreviation
+   * - Time
+     - picosecond
+     - pm
+   * - Distance
+     - nanometer
+     - nm
+   * - Velocity
+     - nanometer / picosecond
+     - nm / ps
+   * - Force
+     - kilojoules / (mol * nanometer)
+     - kJ/(mol*nm)
+
+
+Structure
+---------
+
+Notation
+^^^^^^^^
+
+- ``(name)`` is a Zarr group
+- ``{name}`` is a Zarr group with an arbitrary name
+- ``[variable]`` is a Zarr array
+- ``<dtype>`` is the Zarr array datatype
+- ``+--`` is an attribute of a group or Zarr array
+
+.. code-block:: none
+
+        Zarr root
+         \-- (metadata)
+                    +-- version <str>
+                    +-- authors <str>
+         \-- (particles)
+            \-- (units)
+                +-- length <str>
+                +-- velocity <str>
+                +-- force <str>
+                +-- time <str>
+            \-- (box)
+                +-- boundary : <str>, boundary conditions of unit cell.
+                                      either "periodic" or "none" (see below)
+                \-- [dimensions] <float>, gives box dimensions array in triclinic vectors 
+                                          with shape (n_frames, 3, 3)
+            +-- [subselection] : <int>, optional array of indices of atoms which 
+                                        make up a selected subsystem of the trajectory 
+                                        at each frame with shape
+                                        (n_frames, n_selected_atoms)
+            +-- [step] : <int>, array of integration steps at which 
+                                positions, velocities, and forces were sampled
+                                with shape (n_frames)
+            +-- [time] : <float>, array of simulation times at which 
+                                  positions, velocities, and forces were sampled
+                                  given in physical units with shape (n_frames)
+            +-- [positions] : <float>, gives array of positions
+                                       with shape (n_frames, n_atoms, 3)
+            +-- [velocities] : <float>, gives array of velocities
+                                         with shape (n_frames, n_atoms, 3)
+            +-- [forces] : <float>, gives array of forces
+                                    with shape (n_frames, n_atoms, 3)
+            \-- (observables)
+                +-- [<observable>] <dtype>
+        \-- (userdata) : Optional scratch space for arbitrary data the user wishes to include in the file
+
+Boundary values:
+""""""""""""""""
+
+"periodic" : The simulation box is periodically continued along the given dimension and serves as the unit cell for an infinite tiling of space.
+             In this case, the position value for each atom is its absolute position in space of an arbitrary periodic image of that particle.
+
+"none" : No boundary condition is imposed. This summarizes the situations of open systems (i.e., an infinitely large box) and closed systems (e.g., due to an impenetrable wall). 
+         In such systems, the "dimensions" array is not necessary. The position value for each atom is its absolute position in space.
+
+
+Additional Requirements
+-----------------------
+
+* The zarrtraj file must contain at least one of positions, velocities, or forces.
+* Positions, velocities, and forces must be sampled at the same rate.
+* The step & time arrays must increase monotonically.
+
+
+
