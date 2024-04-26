@@ -7,6 +7,9 @@ The *ZarrTraj* trajectory file format is based on the streamable, compressible
 Units
 -----
 
+Zarrtraj uses the following units by default, but supports reading and writing all
+`units used by MDAnalysis <https://userguide.mdanalysis.org/stable/units.html#table-baseunits>`_
+
 .. list-table
    :widths: 25 25 25
    :header-rows: 1
@@ -91,7 +94,9 @@ Additional Requirements
 -----------------------
 
 * The zarrtraj file must contain at least one of positions, velocities, or forces.
-* Positions, velocities, and forces must be sampled at the same rate.
+* Positions, velocities, and forces must be sampled at the same rate
+* Positions, velocities, and forces must be compressed & filtered with the same
+  numcodecs compressor and filter objects
 * The step & time arrays must increase monotonically.
 
 
