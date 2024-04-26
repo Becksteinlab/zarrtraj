@@ -75,6 +75,7 @@ from MDAnalysis.exceptions import NoDataError
 from MDAnalysis.due import due, Doi
 from MDAnalysis.lib.util import store_init_arguments
 import dask.array as da
+from enum import Enum
 import time # NOTE: REMOVE after test
 
 
@@ -95,78 +96,43 @@ else:
     HAS_ZARR = True
 
 
+class ZarrTrajBoundaryConditions(Enum):
+    ZARRTRAJ_NONE = 0
+    ZARRTRAJ_PERIODIC = 1
+
 class ZarrTrajReader(base.ReaderBase):
     format = 'ZARRTRAJ'
-
-    # This dictionary is used to translate from Zarrtraj units to MDAnalysis units
-    _unit_translation = {
-        'time': {
-            'ps': 'ps',
-            'fs': 'fs',
-            'ns': 'ns',
-            'second': 's',
-            'sec': 's',
-            's': 's',
-            'AKMA': 'AKMA',
-        },
-        'length': {
-            'Angstrom': 'Angstrom',
-            'angstrom': 'Angstrom',
-            'A': 'Angstrom',
-            'nm': 'nm',
-            'pm': 'pm',
-            'fm': 'fm',
-        },
-        'velocity': {
-            'Angstrom ps-1': 'Angstrom/ps',
-            'A ps-1': 'Angstrom/ps',
-            'Angstrom fs-1': 'Angstrom/fs',
-            'A fs-1': 'Angstrom/fs',
-            'Angstrom AKMA-1': 'Angstrom/AKMA',
-            'A AKMA-1': 'Angstrom/AKMA',
-            'nm ps-1': 'nm/ps',
-            'nm ns-1': 'nm/ns',
-            'pm ps-1': 'pm/ps',
-            'm s-1': 'm/s'
-        },
-        'force':  {
-            'kJ mol-1 Angstrom-1': 'kJ/(mol*Angstrom)',
-            'kJ mol-1 nm-1': 'kJ/(mol*nm)',
-            'Newton': 'Newton',
-            'N': 'N',
-            'J m-1': 'J/m',
-            'kcal mol-1 Angstrom-1': 'kcal/(mol*Angstrom)',
-            'kcal mol-1 A-1': 'kcal/(mol*Angstrom)'
-        }
-    }
 
     @store_init_arguments
     def __init__(self, filename,
                  convert_units=True,
                  **kwargs):
-        
+
         if not HAS_ZARR:
             raise RuntimeError("Please install zarr")
         super(ZarrTrajReader, self).__init__(filename, **kwargs)
+        # ReaderBase calls self.filename = str(filename), which we want to undo
         self.filename = filename
+        if not self.filename:
+            raise PermissionError("The Zarr group is not readable")
         self.convert_units = convert_units
+        self._frame = -1
+        self._file = self.filename
+        self._particle_group = self._file['particles']
 
-        self.open_trajectory()
-        
-        # _has dictionary used for checking whether zarrtraj file has
-        # 'position', 'velocity', or 'force' groups in the file
         # IO CALL
         self._has = {name: name in self._particle_group for
-                     name in ('position', 'velocity', 'force')}
+                     name in ('positions', 'velocities', 'forces')}
         # IO CALL
-        self._has_edges = 'edges' in self._particle_group['box']
-        
-        # Gets some info about what settings the datasets were created with
-        # from first available group
+        self._boundary = (ZarrTrajBoundaryConditions.ZARRTRAJ_NONE if
+                          self._particle_group["boundary"] == "none"
+                          else ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC)
+        # Get n_atoms + numcodecs compressor & filter objects from
+        # first available dataset
         # IO CALLS
         for name, value in self._has.items():
             if value:
-                dset = self._particle_group[f'{name}/value']
+                dset = self._particle_group[name]
                 self.n_atoms = dset.shape[1]
                 self.compressor = dset.compressor
                 break
@@ -186,17 +152,6 @@ class ZarrTrajReader(base.ReaderBase):
                       'force': None}
         self._set_translated_units()  # fills units dictionary
         self._read_next_timestep()
-
-    def open_trajectory(self):
-        """opens the trajectory file using zarr library"""
-        if not self.filename:
-            raise PermissionError("The Zarr group is not readable")
-        self._frame = -1
-        self._file = self.filename
-        # pulls first key out of 'particles'
-        # allows for arbitrary name of group1 in 'particles'
-        self._particle_group = self._file['particles'][
-            list(self._file['particles'])[0]]
 
     def _set_translated_units(self):
         """converts units from ZARRTRAJ to MDAnalysis notation
