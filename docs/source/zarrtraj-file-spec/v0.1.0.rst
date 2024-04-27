@@ -96,7 +96,7 @@ Additional Requirements
 * The zarrtraj file must contain at least one of positions, velocities, or forces.
 * Positions, velocities, and forces must be sampled at the same rate
 * Positions, velocities, and forces must be compressed & filtered with the same
-  numcodecs compressor and filter objects
+  numcodecs compressor object and filter list
 * The step & time arrays must increase monotonically.
 
 

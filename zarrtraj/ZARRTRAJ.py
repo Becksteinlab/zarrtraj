@@ -100,6 +100,7 @@ class ZarrTrajBoundaryConditions(Enum):
     ZARRTRAJ_NONE = 0
     ZARRTRAJ_PERIODIC = 1
 
+
 class ZarrTrajReader(base.ReaderBase):
     format = 'ZARRTRAJ'
 
@@ -119,182 +120,118 @@ class ZarrTrajReader(base.ReaderBase):
         self._frame = -1
         self._file = self.filename
         self._particle_group = self._file['particles']
-
-        # IO CALL
-        self._has = {name: name in self._particle_group for
-                     name in ('positions', 'velocities', 'forces')}
+        self._step_array = self._particle_group['step']
+        self._time_array = self._particle_group['time']
         # IO CALL
         self._boundary = (ZarrTrajBoundaryConditions.ZARRTRAJ_NONE if
                           self._particle_group["boundary"] == "none"
                           else ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC)
+
+        if (self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC and
+                'dimensions' not in self._particle_group['box']):
+            raise NoDataError("Triclinic box dimension array must " +
+                              "be provided if `boundary` is set to 'periodic'")
+
+        # IO CALL
+        self._has = set(name in self._particle_group for
+                        name in ('positions', 'velocities', 'forces'))
+
         # Get n_atoms + numcodecs compressor & filter objects from
         # first available dataset
         # IO CALLS
-        for name, value in self._has.items():
-            if value:
-                dset = self._particle_group[name]
-                self.n_atoms = dset.shape[1]
-                self.compressor = dset.compressor
-                break
+        for name in self._has:
+            dset = self._particle_group[name]
+            self.n_atoms = dset.shape[1]
+            self.compressor = dset.compressor
+            # NOTE: fixme
+            self.filters = dset.store[f"{name}/.zarray"]
+            break
         else:
-            raise NoDataError("Provide at least a position, velocity"
-                              " or force group in the h5md file.")
-        
+            raise NoDataError("Provide at least a position, velocity " +
+                              "or force array in the ZarrTraj file.")
+
+        for name in self._has:
+            self._n_frames = self._particle_group[name].shape[0]
+            break
+
         self.ts = self._Timestep(self.n_atoms,
                                  positions=self.has_positions,
                                  velocities=self.has_velocities,
                                  forces=self.has_forces,
                                  **self._ts_kwargs)
-        
+
         self.units = {'time': None,
                       'length': None,
                       'velocity': None,
                       'force': None}
-        self._set_translated_units()  # fills units dictionary
+        self._fill_units_dict()
         self._read_next_timestep()
 
-    def _set_translated_units(self):
-        """converts units from ZARRTRAJ to MDAnalysis notation
-        and fills units dictionary"""
+    def _fill_units_dict(self):
+        """Verify time unit is present and that units for each
+        measurement in (positions, forces, and velocites) in the file
+        is present and fill units dict"""
 
-        # need this dictionary to associate 'position': 'length'
         _group_unit_dict = {'time': 'time',
-                            'position': 'length',
-                            'velocity': 'velocity',
-                            'force': 'force'
+                            'positions': 'length',
+                            'velocities': 'velocity',
+                            'forces': 'force'
                             }
 
         for group, unit in _group_unit_dict.items():
-            self._translate_zarrtraj_units(group, unit)
-            self._check_units(group, unit)
+            if group in self._has:
+                try:
+                    self.units[unit] = self._particle_group[
+                        "units"].attrs[unit]
+                except KeyError:
+                    raise ValueError("Zarrtraj file must have units set for " +
+                                     "time and each of positions, " +
+                                     "velocities, and forces present")
 
-    def _translate_zarrtraj_units(self, group, unit):
-        """stores the translated unit string into the units dictionary"""
-
-        errmsg = "{} unit '{}' is not recognized by ZarrTrajReader."
-
-        if unit == 'time' or self._has[group]:
-            try:
-                self.units[unit] = self._unit_translation[unit][
-                    self._file['particles']['units'].attrs[unit]]
-            except KeyError:
-                raise RuntimeError(errmsg.format(
-                                    unit, self._file['particles'][
-                                        'units'].attrs[unit])
-                                ) from None
-        
-    def _check_units(self, group, unit):
-        """Raises error if no units are provided from Zarrtraj file
-        and convert_units=True"""
-
-        if not self.convert_units:
-            return
-
-        errmsg = "Zarrtraj file must have readable units if ``convert_units`` is"
-        " set to ``True``. MDAnalysis sets ``convert_units=True`` by default."
-        " Set ``convert_units=False`` to load Universe without units."
-
-        if unit == 'time':
-            if self.units['time'] is None:
-                raise ValueError(errmsg)
-
-        else:
-            if self._has[group]:
-                if self.units[unit] is None:
-                    raise ValueError(errmsg)
-                
     def _read_next_timestep(self):
-        """read next frame in trajectory"""
+        """Read next frame in trajectory"""
         return self._read_frame(self._frame + 1)
 
     def _read_frame(self, frame):
-        """reads data from zarrtraj file and copies to current timestep"""
-        try:
-            for name, value in self._has.items():
-                if value and 'step' in self._particle_group[name]:
-                    _ = self._particle_group[name]['step'][frame]
-                    break
-            else:
-                if self._has_edges and 'step' in self._particle_group['box']['edges']:
-                    _ = self._particle_group['box']['edges']['step'][frame]
-                else:
-                    raise NoDataError("Provide at least a position, velocity"
-                                    " or force group in the zarrtraj file.")
-            
-        except (ValueError, IndexError):
-            raise IOError from None
-
+        """Reads data from zarrtraj file and copies to current timestep"""
         self._frame = frame
         ts = self.ts
         particle_group = self._particle_group
         ts.frame = frame
 
-        # fills data dictionary from 'observables' group
+        # NOTE: handle observables
+        # Fills data dictionary from 'observables' group
         # Note: dt is not read into data as it is not decided whether
         # Timestep should have a dt attribute (see Issue #2825)
-        self._copy_to_data()
+        self.ts.time = self._time_array[self._frame]
+        self.ts.data['step'] = self._step_array[self._frame]
 
         # Sets frame box dimensions
-        # Note: Zarrtraj files must contain 'box' group in each 'particles' group
-        if "edges" in particle_group["box"]:
-            edges = particle_group["box/edges/value"][frame, :]
-            # A D-dimensional vector or a D × D matrix, depending on the
-            # geometry of the box, of Float or Integer type. If edges is a
-            # vector, it specifies the space diagonal of a cuboid-shaped box.
-            # If edges is a matrix, the box is of triclinic shape with the edge
-            # vectors given by the rows of the matrix.
-            if edges.shape == (3,):
-                ts.dimensions = [*edges, 90, 90, 90]
-            else:
-                ts.dimensions = core.triclinic_box(*edges)
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
+            edges = particle_group["box/dimensions"][frame, :]
+            ts.dimensions = core.triclinic_box(*edges)
         else:
             ts.dimensions = None
 
         # set the timestep positions, velocities, and forces with
         # current frame dataset
-        if self._has['position']:
-            self._read_dataset_into_ts('position', ts.positions)
-        if self._has['velocity']:
-            self._read_dataset_into_ts('velocity', ts.velocities)
-        if self._has['force']:
-            self._read_dataset_into_ts('force', ts.forces)
+        if self.has_positions:
+            self._read_dataset_into_ts('positions', ts.positions)
+        if self.has_velocities:
+            self._read_dataset_into_ts('velocities', ts.velocities)
+        if self.has_forces:
+            self._read_dataset_into_ts('forces', ts.forces)
 
         if self.convert_units:
             self._convert_units()
 
         return ts
-    
-    def _copy_to_data(self):
-        """assigns values to keys in data dictionary"""
-
-        # pulls 'time' and 'step' out of first available parent group
-        time_found = False
-        step_found = False
-
-        for name, value in self._has.items():
-            if value:
-                if 'time' in self._particle_group[name]:
-                    self.ts.time = self._particle_group[name][
-                        'time'][self._frame]
-                    break
-        if not time_found:
-            self.ts.time = self._particle_group['box']['edges']['time'][self._frame]
-        
-        for name, value in self._has.items():
-            if value:
-                if 'step' in self._particle_group[name]:
-                    self.ts.data['step'] = self._particle_group[name][
-                        'step'][self._frame]
-                    break
-        if not step_found:
- 
-            self.ts.data['step'] = self._particle_group['box']['edges']['step'][self._frame]
 
     def _read_dataset_into_ts(self, dataset, attribute):
-        """reads position, velocity, or force dataset array at current frame
+        """Reads position, velocity, or force dataset array at current frame
         into corresponding ts attribute"""
 
-        n_atoms_now = self._particle_group[f'{dataset}/value'][
+        n_atoms_now = self._particle_group[dataset][
                                            self._frame].shape[0]
         if n_atoms_now != self.n_atoms:
             raise ValueError(f"Frame {self._frame} of the {dataset} dataset"
@@ -303,11 +240,8 @@ class ZarrTrajReader(base.ReaderBase):
                              f" dataset had {self.n_atoms} atoms."
                              " MDAnalysis is unable to deal"
                              " with variable topology!")
-        
-        self._particle_group[f'{dataset}/value'].get_basic_selection(
-            selection=np.s_[self._frame, :],
-            out=attribute
-        )
+
+        attribute[:] = self._particle_group[dataset][self._frame, :]
 
     def _convert_units(self):
         """converts time, position, velocity, and force values if they
@@ -333,8 +267,6 @@ class ZarrTrajReader(base.ReaderBase):
     @staticmethod
     def _format_hint(thing):
         """Can this Reader read *thing*"""
-        # Check if the object is already a zarr.Group
-        # If it isn't, try opening it as a group and if it excepts, return False
         if not HAS_ZARR or not isinstance(thing, zarr.Group):
             return False
         else:
@@ -342,31 +274,29 @@ class ZarrTrajReader(base.ReaderBase):
 
     @staticmethod
     def parse_n_atoms(filename, storage_options=None):
-        for group in filename['particles/trajectory']:
+        for group in filename['particles']:
             if group in ('position', 'velocity', 'force'):
-                n_atoms = filename[f'particles/trajectory/{group}/value'].shape[1]
+                n_atoms = filename[f'particles/{group}'].shape[1]
                 return n_atoms
 
-        raise NoDataError("Could not construct minimal topology from the "
-                        "Zarrtraj trajectory file, as it did not contain a "
-                        "'position', 'velocity', or 'force' group. "
-                        "You must include a topology file.")
+        raise NoDataError("Could not construct minimal topology from the " +
+                          "Zarrtraj trajectory file, as it did not contain " +
+                          "a 'position', 'velocity', or 'force' group. " +
+                          "You must include a topology file.")
 
     def close(self):
-        """close reader"""
+        """Close reader"""
         self._file.store.close()
-    
+
     def _reopen(self):
         """reopen trajectory"""
         self.close()
-        self.open_trajectory()
+        self._frame = -1
 
     @property
     def n_frames(self):
         """number of frames in trajectory"""
-        for name, value in self._has.items():
-            if value:
-                return self._particle_group[name]['value'].shape[0]
+        return self._n_frames
 
     def Writer(self, filename, n_atoms=None, **kwargs):
         """Return writer for trajectory format
@@ -383,29 +313,38 @@ class ZarrTrajReader(base.ReaderBase):
     @property
     def has_positions(self):
         """``True`` if 'position' group is in trajectory."""
-        return self._has['position']
+        return "positions" in self._has
 
     @has_positions.setter
     def has_positions(self, value: bool):
-        self._has['position'] = value
+        if value:
+            self._has.add("positions")
+        else:
+            self._has.remove("positions")
 
     @property
     def has_velocities(self):
         """``True`` if 'velocity' group is in trajectory."""
-        return self._has['velocity']
+        return "velocities" in self._has
 
     @has_velocities.setter
     def has_velocities(self, value: bool):
-        self._has['velocity'] = value
+        if value:
+            self._has.add("velocities")
+        else:
+            self._has.remove("velocities")
 
     @property
     def has_forces(self):
         """``True`` if 'force' group is in trajectory."""
-        return self._has['force']
+        return "forces" in self._has
 
     @has_forces.setter
     def has_forces(self, value: bool):
-        self._has['force'] = value
+        if value:
+            self._has.add("forces")
+        else:
+            self._has.remove("forces")
 
     def __getstate__(self):
         state = self.__dict__.copy()
