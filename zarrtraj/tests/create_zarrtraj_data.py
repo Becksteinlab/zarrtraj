@@ -21,7 +21,7 @@ def create_test_trj(uni, fname):
     with mda.Writer(root, n_atoms,
                     format='ZARRTRAJ',
                     positions=True,
-                    velocities=True,
+                    velocities=True, 
                     forces=True,
                     convert_units=False) as w:
         for i in range(5):

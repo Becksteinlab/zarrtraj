@@ -95,6 +95,9 @@ except ImportError:
 else:
     HAS_ZARR = True
 
+ZARRTRAJ_DEFAULT_BUFSIZE = 10485760 # 10 MB
+ZARRTRAJ_DEFAULT_FPC = 10 # 10 frames per chunk
+
 
 class ZarrTrajBoundaryConditions(Enum):
     ZARRTRAJ_NONE = 0
@@ -124,7 +127,7 @@ class ZarrTrajReader(base.ReaderBase):
         self._time_array = self._particle_group['time']
         # IO CALL
         self._boundary = (ZarrTrajBoundaryConditions.ZARRTRAJ_NONE if
-                          self._particle_group["boundary"] == "none"
+                          self._particle_group["box"].attrs["boundary"] == "none"
                           else ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC)
 
         if (self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC and
@@ -133,7 +136,7 @@ class ZarrTrajReader(base.ReaderBase):
                               "be provided if `boundary` is set to 'periodic'")
 
         # IO CALL
-        self._has = set(name in self._particle_group for
+        self._has = set(name for name in self._particle_group if
                         name in ('positions', 'velocities', 'forces'))
 
         # Get n_atoms + numcodecs compressor & filter objects from
@@ -143,8 +146,7 @@ class ZarrTrajReader(base.ReaderBase):
             dset = self._particle_group[name]
             self.n_atoms = dset.shape[1]
             self.compressor = dset.compressor
-            # NOTE: fixme
-            self.filters = dset.store[f"{name}/.zarray"]
+            # NOTE: add filters
             break
         else:
             raise NoDataError("Provide at least a position, velocity " +
@@ -177,7 +179,10 @@ class ZarrTrajReader(base.ReaderBase):
                             'velocities': 'velocity',
                             'forces': 'force'
                             }
-
+        try:
+            self.units['time'] = self._particle_group["units"].attrs["time"]
+        except KeyError:
+            raise ValueError("Zarrtraj file must have unit set for time")
         for group, unit in _group_unit_dict.items():
             if group in self._has:
                 try:
@@ -185,7 +190,7 @@ class ZarrTrajReader(base.ReaderBase):
                         "units"].attrs[unit]
                 except KeyError:
                     raise ValueError("Zarrtraj file must have units set for " +
-                                     "time and each of positions, " +
+                                     "each of positions, " +
                                      "velocities, and forces present")
 
     def _read_next_timestep(self):
@@ -194,6 +199,9 @@ class ZarrTrajReader(base.ReaderBase):
 
     def _read_frame(self, frame):
         """Reads data from zarrtraj file and copies to current timestep"""
+        if frame >= self._n_frames:
+            raise IOError from None
+
         self._frame = frame
         ts = self.ts
         particle_group = self._particle_group
@@ -244,7 +252,7 @@ class ZarrTrajReader(base.ReaderBase):
         attribute[:] = self._particle_group[dataset][self._frame, :]
 
     def _convert_units(self):
-        """converts time, position, velocity, and force values if they
+        """Converts time, position, velocity, and force values if they
         are not given in MDAnalysis standard units
 
         See https://userguide.mdanalysis.org/stable/units.html
@@ -252,16 +260,17 @@ class ZarrTrajReader(base.ReaderBase):
 
         self.ts.time = self.convert_time_from_native(self.ts.time)
 
-        if self._has_edges and self.ts.dimensions is not None:
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
+            # Only convert [:3] since last 3 elements are angle
             self.convert_pos_from_native(self.ts.dimensions[:3])
 
-        if self._has['position']:
+        if self.has_positions:
             self.convert_pos_from_native(self.ts.positions)
 
-        if self._has['velocity']:
+        if self.has_velocities:
             self.convert_velocities_from_native(self.ts.velocities)
 
-        if self._has['force']:
+        if self.has_forces:
             self.convert_forces_from_native(self.ts.forces)
 
     @staticmethod
@@ -275,7 +284,7 @@ class ZarrTrajReader(base.ReaderBase):
     @staticmethod
     def parse_n_atoms(filename, storage_options=None):
         for group in filename['particles']:
-            if group in ('position', 'velocity', 'force'):
+            if group in ('positions', 'velocities', 'forces'):
                 n_atoms = filename[f'particles/{group}'].shape[1]
                 return n_atoms
 
@@ -305,6 +314,7 @@ class ZarrTrajReader(base.ReaderBase):
             n_atoms = self.n_atoms
         kwargs.setdefault('format', "ZARRTRAJ")
         kwargs.setdefault('compressor', self.compressor)
+        # NOTE: add filters
         kwargs.setdefault('positions', self.has_positions)
         kwargs.setdefault('velocities', self.has_velocities)
         kwargs.setdefault('forces', self.has_forces)
@@ -353,8 +363,7 @@ class ZarrTrajReader(base.ReaderBase):
 
     def __setstate__(self, state):
         self.__dict__ = state
-        self._particle_group = self._file['particles'][
-                               list(self._file['particles'])[0]]
+        self._particle_group = self._file['particles']
         self[self.ts.frame]
 
 
@@ -362,114 +371,73 @@ class ZarrTrajWriter(base.WriterBase):
     format = 'ZARRTRAJ'
     multiframe = True
 
-    #: currently written version of the file format
-    ZARRTRAJ_VERSION = 1
+    #: These variables are not written from :attr:`Timestep.data`
+    #: dictionary to the observables group in the H5MD file
+    data_blacklist = ['step', 'time', 'dt']
 
-    _unit_translation_dict = {
-        'time': {
-            'ps': 'ps',
-            'fs': 'fs',
-            'ns': 'ns',
-            'second': 's',
-            'sec': 's',
-            's': 's',
-            'AKMA': 'AKMA'},
-        'length': {
-            'Angstrom': 'Angstrom',
-            'angstrom': 'Angstrom',
-            'A': 'Angstrom',
-            'nm': 'nm',
-            'pm': 'pm',
-            'fm': 'fm'},
-        'velocity': {
-            'Angstrom/ps': 'Angstrom ps-1',
-            'A/ps': 'Angstrom ps-1',
-            'Angstrom/fs': 'Angstrom fs-1',
-            'A/fs': 'Angstrom fs-1',
-            'Angstrom/AKMA': 'Angstrom AKMA-1',
-            'A/AKMA': 'Angstrom AKMA-1',
-            'nm/ps': 'nm ps-1',
-            'nm/ns': 'nm ns-1',
-            'pm/ps': 'pm ps-1',
-            'm/s': 'm s-1'},
-        'force':  {
-            'kJ/(mol*Angstrom)': 'kJ mol-1 Angstrom-1',
-            'kJ/(mol*nm)': 'kJ mol-1 nm-1',
-            'Newton': 'Newton',
-            'N': 'N',
-            'J/m': 'J m-1',
-            'kcal/(mol*Angstrom)': 'kcal mol-1 Angstrom-1',
-            'kcal/(mol*A)': 'kcal mol-1 Angstrom-1'}}
+    #: currently written version of the file format
+    ZARRTRAJ_VERSION = '0.1.0'
 
     def __init__(self, filename, n_atoms, n_frames=None,
                  convert_units=True, chunks=None,
                  positions=True, velocities=True,
                  forces=True, timeunit=None, lengthunit=None,
                  velocityunit=None, forceunit=None, compressor=None,
-                 filters=None, max_memory=None, **kwargs):
-        
+                 filters=None, max_memory=None,
+                 force_buffered=False, **kwargs):
+
         if not HAS_ZARR:
             raise RuntimeError("ZarrTrajWriter: Please install zarr")
+        if not isinstance(filename, zarr.Group):
+            raise TypeError("Expected a Zarr group object, but " +
+                            "received an instance of type {}"
+                            .format(type(filename).__name__))
+        # Verify group is open for writing
+        if not filename.store.is_writeable():
+            raise PermissionError("The Zarr group is not writeable")
         if n_atoms == 0:
             raise ValueError("ZarrTrajWriter: no atoms in output trajectory")
         self.filename = filename
+        self._file = filename
         self.n_atoms = n_atoms
         self.n_frames = n_frames
-        self.zarr_group = None
-        self._open_file()
+        self.force_buffered = force_buffered
+
+        # Fill in Zarrtraj metadata from kwargs
+        # IO CALL
+        self._file.require_group('metadata')
+        self._file['metadata'].attrs['version'] = self.ZARRTRAJ_VERSION
+
         self._determine_if_cloud_storage()
-        if self._is_cloud_storage:
+        if self._is_cloud_storage or self.force_buffered:
             # Ensure n_frames exists
             if n_frames is None:
-                raise TypeError("ZarrTrajWriter: Cloud writing requires " +
+                raise TypeError("ZarrTrajWriter: Buffered writing requires " +
                                 "'n_frames' kwarg")
-            # Default buffer size is 1MB
-            self.max_memory = 10485760 if max_memory is None else max_memory
+            self.max_memory = ZARRTRAJ_DEFAULT_BUFSIZE if max_memory is None else max_memory
 
-            self.chunks = chunks
-        else:
-            self.chunks = (1, n_atoms, 3) if chunks is None else chunks
-
-        self.filters = filters
-        self.compressor = compressor
+        self.chunks = (ZARRTRAJ_DEFAULT_FPC, self.n_atoms, 3) if chunks is None else chunks
+        self.filters = filters if filters is not None else []
+        self.compressor = compressor if compressor is not None else zarr.storage.default_compressor
         self.convert_units = convert_units
-        
         # The writer defaults to writing all data from the parent Timestep if
         # it exists. If these are True, the writer will check each
         # Timestep.has_*  value and fill the self._has dictionary accordingly
         # in _initialize_hdf5_datasets()
-        self._write_positions = positions
-        self._write_velocities = velocities
-        self._write_forces = forces
-        if not any([self._write_positions,
-                    self._write_velocities,
-                    self._write_velocities]):
+        self._write = set()
+        if positions: self._write.add('positions')
+        if velocities: self._write.add('velocities')
+        if forces: self._write.add('forces')
+
+        if not self._write:
             raise ValueError("At least one of positions, velocities, or "
                              "forces must be set to ``True``.")
 
-        self._new_units = {'time': timeunit,
-                           'length': lengthunit,
-                           'velocity': velocityunit,
-                           'force': forceunit}
         self._initial_write = True
-
-    def _open_file(self):
-        if not isinstance(self.filename, zarr.Group):
-            raise TypeError("Expected a Zarr group object, but " +
-                            "received an instance of type {}"
-                            .format(type(self.filename).__name__))
-        # Verify group is open for writing
-        if not self.filename.store.is_writeable():
-            raise PermissionError("The Zarr group is not writeable")
-        self.zarr_group = self.filename
-
-        # fill in Zarrtraj metadata from kwargs
-        self.zarr_group.require_group('zarrtraj')
-        self.zarr_group['zarrtraj'].attrs['version'] = self.ZARRTRAJ_VERSION
 
     def _determine_if_cloud_storage(self):
         # Check if we are working with a cloud storage type
-        store = self.zarr_group.store
+        store = self._file.store
         if isinstance(store, zarr.storage.FSStore):
             if 's3' in store.fs.protocol:
                 # Verify s3fs is installed
@@ -492,7 +460,6 @@ class ZarrTrajWriter(base.WriterBase):
             self._is_cloud_storage = True
         else:
             self._is_cloud_storage = False
-        
 
     def _write_next_frame(self, ag):
         """Write information associated with ``ag`` at current frame
@@ -532,35 +499,11 @@ class ZarrTrajWriter(base.WriterBase):
                 self._initialize_zarr_datasets(ts)
             self._initial_write = False
         return self._write_next_timestep(ts)
-    
+
     def _determine_units(self, ag):
-        """determine which units the file will be written with
-
-        By default, it fills the :attr:`self.units` dictionary by copying the
-        units dictionary of the parent file. Because Zarrtraj files have no
-        standard unit restrictions, users may pass a kwarg in ``(timeunit,
-        lengthunit, velocityunit, forceunit)`` to the writer so long as
-        MDAnalysis has a conversion factor for it (:exc:`ValueError` raised if
-        it does not). These custom unit arguments must be in
-        `MDAnalysis notation`_. If custom units are supplied from the user,
-        :attr`self.units[unit]` is replaced with the corresponding
-        `unit` argument.
-
-        """
+        """Determine which units the file will be written with"""
 
         self.units = ag.universe.trajectory.units.copy()
-
-        # set user input units
-        for key, value in self._new_units.items():
-            if value is not None:
-                if value not in self._unit_translation_dict[key]:
-                    raise ValueError(f"{value} is not a unit recognized by"
-                                     " MDAnalysis. Allowed units are:"
-                                     f" {self._unit_translation_dict.keys()}"
-                                     " For more information on units, see"
-                                     " `MDAnalysis units`_.")
-                else:
-                    self.units[key] = self._new_units[key]
 
         if self.convert_units:
             # check if all units are None
@@ -571,14 +514,17 @@ class ZarrTrajWriter(base.WriterBase):
                                  "with no units, set ``convert_units=False``.")
 
     def _determine_has(self, ts):
-        # ask the parent file if it has positions, velocities, and forces
-        # if prompted by the writer with the self._write_* attributes
-        self._has = {group: getattr(ts, f'has_{attr}')
-                     if getattr(self, f'_write_{attr}')
-                     else False for group, attr in zip(
-                     ('position', 'velocity', 'force'),
-                     ('positions', 'velocities', 'forces'))}
-        self._has_edges = True if ts.dimensions is not None and np.all(ts.dimensions > 0) else False
+        # ask the parent file if it has positions, velocities, and forces,
+        # and dimensions
+        self._has = set()
+        if "positions" in self._write and ts.has_positions:
+            self._has.add("positions")
+        if "velocities" in self._write and ts.has_velocities:
+            self._has.add("velocities")
+        if "forces" in self._write and ts.has_forces:
+            self._has.add("forces")
+        self._boundary = (ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC if ts.dimensions is not None
+                          else ZarrTrajBoundaryConditions.ZARRTRAJ_NONE)
 
     def _check_max_memory(self):
         """
@@ -594,7 +540,7 @@ class ZarrTrajWriter(base.WriterBase):
         # Write edges, step, and time in the same pattern as
         # velocity, force, and position, though it is not
         # strictly necessary for simplicity
-        if self._has_edges:
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             mem_per_chunk += float32_size * self.chunks[0] * 9
         # Step
         mem_per_chunk += int32_size * self.chunks[0]
@@ -609,7 +555,7 @@ class ZarrTrajWriter(base.WriterBase):
 
         if self.has_velocities:
             mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
-        
+
         if mem_per_chunk > self.max_memory:
             raise ValueError(f"`max_memory` kwarg " +
                              "must be at least {mem_per_chunk} for " +
@@ -617,7 +563,7 @@ class ZarrTrajWriter(base.WriterBase):
         else:
             self.n_buffer_frames = self.chunks[0] * (self.max_memory // 
                                                      mem_per_chunk)
-    
+
     def _determine_chunks(self):
         """
         If ``chunks`` is not provided as a `kwarg` to the writer in the case
@@ -634,23 +580,23 @@ class ZarrTrajWriter(base.WriterBase):
 
         n_data_buffers = (self.has_positions + self.has_velocities + self.has_forces)
         if n_data_buffers:
-            data_buffer_size = (10485760 - (float32_size * 9) -
+            data_buffer_size = (ZARRTRAJ_DEFAULT_BUFSIZE - (float32_size * 9) -
                                 int32_size - float32_size) // n_data_buffers
             mem_per_buffer = float32_size * self.n_atoms * 3
             if mem_per_buffer <= data_buffer_size:
                 mem_per_frame = (n_data_buffers * mem_per_buffer +
                                  (float32_size * 9) + int32_size + 
                                  float32_size)
-                self.chunks = (10485760 // mem_per_frame, self.n_atoms, 3)
+                self.chunks = (ZARRTRAJ_DEFAULT_BUFSIZE // mem_per_frame, self.n_atoms, 3)
             else:
                 raise TypeError(f"Trajectory frame cannot fit in " +
-                                "default buffer size of 10MB")
+                                "default buffer size of {ZARRTRAJ_DEFAULT_BUFSIZE}MB")
 
 
     def _initialize_zarr_datasets(self, ts):
         """initializes all datasets that will be written to by
         :meth:`_write_next_timestep`. Datasets must be sampled at the same
-        rate in version 0.0.0 of zarrtraj
+        rate in version 0.1.0 of zarrtraj
 
         Note
         ----
@@ -659,142 +605,102 @@ class ZarrTrajWriter(base.WriterBase):
 
 
         """
+        if self.n_frames is None:
+            self._first_dim = 0
+        else:
+            self._first_dim = self.n_frames
 
         # for keeping track of where to write in the dataset
         self._counter = 0
-        first_dim = self.n_frames if self.n_frames is not None else 0
-        
-        # initialize trajectory group
-        self.zarr_group.require_group('particles').require_group('trajectory')
-        self._traj = self.zarr_group['particles/trajectory']
+        self._particle_group = self._file.require_group('particles')
         # NOTE: subselection init goes here when implemented
         # box group is required for every group in 'particles'
         # Initialize units group
-        self.zarr_group['particles'].require_group('units')
-        self._unit_group = self.zarr_group['particles']['units']
+        self._particle_group.require_group('units')
 
-        self._traj.require_group('box')
-        if self._has_edges:
-            self._traj['box'].attrs['boundary'] = 3*['periodic']
-            self._traj['box'].require_group('edges')
-            self._edges = self._traj.require_dataset('box/edges/value',
-                                                     shape=(first_dim, 3, 3),
-                                                     dtype=np.float32)
-            self._step = self._traj.require_dataset('box/edges/step',
-                                                    shape=(first_dim,),
-                                                    dtype=np.int32)
-            self._time = self._traj.require_dataset('box/edges/time',
-                                                    shape=(first_dim,),
-                                                    dtype=np.float32)
-            self._set_attr_unit('length')
-            self._set_attr_unit('time')
+        self._particle_group.require_group('box')
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
+            self._particle_group['box'].attrs['boundary'] = 'periodic'
+            self._particle_group['box']['dimensions'] = zarr.empty(
+                shape=(self._first_dim, 3, 3),
+                dtype=np.float32,
+                compressor=self.compressor,
+                filters=self.filters
+            )
+            self._edges = self._particle_group['box']['dimensions']
         else:
             # if no box, boundary attr must be "none" 
-            self._traj['box'].attrs['boundary'] = 3*['none']
-            self._create_step_and_time_datasets()
+            self._particle_group['box'].attrs['boundary'] = 'none'
+
+        self._particle_group['step'] = (zarr.empty(shape=(self._first_dim,),
+                                                   dtype=np.int32))
+        self._step = self._particle_group['step']
+        self._particle_group['time'] = (zarr.empty(shape=(self._first_dim,),
+                                                   dtype=np.int32))
+        self._time = self._particle_group['time']
+        self._particle_group['units'].attrs['time'] = self.units['time']
 
         if self.has_positions:
-            self._create_trajectory_dataset('position')
-            self._pos = self._traj['position/value']
-            self._set_attr_unit('length')
+            self._create_trajectory_dataset('positions')
+            self._pos = self._particle_group['positions']
+            self._particle_group['units'].attrs['length'] = self.units['length']
         if self.has_velocities:
-            self._create_trajectory_dataset('velocity')
-            self._vel = self._traj['velocity/value']
-            self._set_attr_unit('velocity')
+            self._create_trajectory_dataset('velocities')
+            self._vel = self._particle_group['velocities']
+            self._particle_group['units'].attrs['velocity'] = self.units['velocity']
         if self.has_forces:
-            self._create_trajectory_dataset('force')
-            self._force = self._traj['force/value']
-            self._set_attr_unit('force')
+            self._create_trajectory_dataset('forces')
+            self._force = self._particle_group['forces']
+            self._particle_group['units'].attrs['force'] = self.units['force']
 
         # intialize observable datasets from ts.data dictionary that
         # are NOT in self.data_blacklist
-        #if self.data_keys:
-        #    for key in self.data_keys:
-        #        self._create_observables_dataset(key, ts.data[key])
+        self.data_keys = [
+            key for key in ts.data.keys() if key not in self.data_blacklist]
+        if self.data_keys:
+            self._obsv = self._particle_group.require_group('observables')
+        if self.data_keys:
+            for key in self.data_keys:
+                self._create_observables_dataset(key, ts.data[key])
 
-    def _create_step_and_time_datasets(self):
-        """helper function to initialize a dataset for step and time
+    def _create_observables_dataset(self, group, data):
+        """helper function to initialize a dataset for each observable"""
 
-        Hunts down first available location to create the step and time
-        datasets. This should only be called if the trajectory has no
-        dimension, otherwise the 'box/edges' group creates step and time
-        datasets since 'box' is the only required group in 'particles'.
-
-        :attr:`self._step` and :attr`self._time` serve as links to the created
-        datasets that other datasets can also point to for their step and time.
-        This serves two purposes:
-            1. Avoid redundant writing of multiple datasets that share the
-               same step and time data.
-            2. In HDF5, each chunked dataset has a cache (default 1 MiB),
-               so only 1 read is required to access step and time data
-               for all datasets that share the same step and time.
-
-        """
-        first_dim = self.n_frames if self.n_frames is not None else 0
-        for group, value in self._has.items():
-            if value:
-                self._step = self._traj.require_dataset(f'{group}/step',
-                                                        shape=(first_dim,),
-                                                        dtype=np.int32)
-                self._time = self._traj.require_dataset(f'{group}/time',
-                                                        shape=(first_dim,),
-                                                        dtype=np.float32)
-                self._set_attr_unit('time')
-                break
+        self._obsv.require_group(group)
+        # guarantee ints and floats have a shape ()
+        data = np.asarray(data)
+        self._obsv[group] = zarr.empty(shape=(0,) + data.shape,
+                                       dtype=data.dtype)
 
     def _create_trajectory_dataset(self, group):
         """helper function to initialize a dataset for
         position, velocity, and force"""
-
-        if self.n_frames is None:
-            shape = (0, self.n_atoms, 3)
-        else:
-            shape = (self.n_frames, self.n_atoms, 3)
-
-        self._traj.require_group(group)
-        self._traj.require_dataset(f'{group}/value',
-                                   shape=shape,
-                                   dtype=np.float32,
-                                   chunks=self.chunks,
-                                   filters=self.filters,
-                                   compressor=self.compressor)
-        # Hard linking in zarr is not possible, so we only keep one step and time aray
-        # if 'step' not in self._traj[group]:
-        #     self._traj[f'{group}/step'] = self._step
-        # if 'time' not in self._traj[group]:
-        #     self._traj[f'{group}/time'] = self._time
-
-    def _set_attr_unit(self, unit):
-        """helper function to set a unit attribute for an Zarr dataset"""
-
-        if self.units[unit] is None:
-            return
-
-        self._unit_group.attrs[unit] = self._unit_translation_dict[unit][self.units[unit]]
+        self._particle_group[group] = zarr.empty(shape=(self._first_dim,
+                                                        self.n_atoms, 3),
+                                                 dtype=np.float32,
+                                                 chunks=self.chunks,
+                                                 filters=self.filters,
+                                                 compressor=self.compressor)
 
     def _initialize_memory_buffers(self):
         self._time_buffer = np.zeros((self.n_buffer_frames,), dtype=np.float32)
         self._step_buffer = np.zeros((self.n_buffer_frames,), dtype=np.int32)
-        self._edges_buffer = np.zeros((self.n_buffer_frames, 3, 3), dtype=np.float32)
+        self._edges_buffer = np.zeros((self.n_buffer_frames, 3, 3),
+                                      dtype=np.float32)
         if self.has_positions:
-            self._pos_buffer = np.zeros((self.n_buffer_frames, self.n_atoms, 
+            self._pos_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
                                          3), dtype=np.float32)
         if self.has_velocities:
-            self._force_buffer = np.zeros((self.n_buffer_frames, self.n_atoms, 
-                                         3), dtype=np.float32)
+            self._force_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
+                                           3), dtype=np.float32)
         if self.has_forces:
-            self._vel_buffer = np.zeros((self.n_buffer_frames, self.n_atoms, 
+            self._vel_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
                                          3), dtype=np.float32)
         # Reduce cloud I/O by storing previous step val for error checking
         self._prev_step = None
 
     def _write_next_cloud_timestep(self, ts):
         """
-        This method performs two steps:
-
-        1. First, it appends the next frame to 
-        
-        
         """
         i = self._counter
         buffer_index = i % self.n_buffer_frames
@@ -808,41 +714,40 @@ class ZarrTrajWriter(base.WriterBase):
             raise ValueError("The Zarrtraj standard dictates that the step "
                              "dataset must increase monotonically in value.")
         self._prev_step = curr_step
-        start = time.time()
 
-        if self.units['time'] is not None:
+        if self.units.attrs['time'] is not None:
             self._time_buffer[buffer_index] = self.convert_time_to_native(ts.time)
         else:
             self._time_buffer[buffer_index] = ts.time
     
-        if self._has_edges:
-            if self.units['length'] is not None:
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
+            if self.units.attrs['length'] is not None:
                 self._edges_buffer[buffer_index, :] = self.convert_pos_to_native(ts.triclinic_dimensions)
             else:
                 self._edges_buffer[buffer_index, :] = ts.triclinic_dimensions
 
         if self.has_positions:
-            if self.units['length'] is not None:
+            if self.units.attrs['length'] is not None:
                 self._pos_buffer[buffer_index, :] = self.convert_pos_to_native(ts.positions)
             else:
                 self._pos_buffer[buffer_index, :] = ts.positions
 
         if self.has_velocities:
-            if self.units['velocity'] is not None:
+            if self.units.attrs['velocity'] is not None:
                 self._vel_buffer[buffer_index, :] = self.convert_velocities_to_native(ts.velocities)
             else:
                 self._vel_buffer[buffer_index, :] = ts.velocities
 
         if self.has_forces:
-            if self.units['force'] is not None:
+            if self.units.attrs['force'] is not None:
                 self._force_buffer[buffer_index, :] = self.convert_forces_to_native(ts.forces)
             else:
                 self._force_buffer[buffer_index, :] = ts.forces
-            
+
         # If buffer is full or last write call, write buffer to cloud
         if (((i + 1) % self.n_buffer_frames == 0) or
                 (i == self.n_frames - 1)):
-            da.from_array(self._step_buffer[:buffer_index + 1]).to_zarr(self._step, region=(slice(i - buffer_index, i + 1),), return_stored=True)
+            da.from_array(self._step_buffer[:buffer_index + 1]).to_zarr(self._step, region=(slice(i - buffer_index, i + 1),))
             da.from_array(self._time_buffer[:buffer_index + 1]).to_zarr(self._time, region=(slice(i - buffer_index, i + 1),))
             if self._has_edges:
                 da.from_array(self._edges_buffer[:buffer_index + 1]).to_zarr(self._edges, region=(slice(i - buffer_index, i + 1),))
@@ -873,7 +778,7 @@ class ZarrTrajWriter(base.WriterBase):
         # sampled, therefore ts.data['step'] is the most appropriate value
         # to use. However, step is also necessary in Zarrtraj to allow
         # temporal matching of the data, so ts.frame is used as an alternative
-        new_shape = (self._step.shape[0] + 1,) + self._step.shape[1:]
+        new_shape = (self._step.shape[0] + 1,)
         self._step.resize(new_shape)
         try:
             self._step[i] = ts.data['step']
@@ -884,11 +789,11 @@ class ZarrTrajWriter(base.WriterBase):
                              "dataset must increase monotonically in value.")
 
         # the dataset.resize() method should work with any chunk shape
-        new_shape = (self._time.shape[0] + 1,) + self._time.shape[1:]
+        new_shape = (self._time.shape[0] + 1,)
         self._time.resize(new_shape)
         self._time[i] = ts.time
 
-        if 'edges' in self._traj['box']:
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             new_shape = (self._edges.shape[0] + 1,) + self._edges.shape[1:]
             self._edges.resize(new_shape)
             self._edges[i, :] = ts.triclinic_dimensions
@@ -909,7 +814,7 @@ class ZarrTrajWriter(base.WriterBase):
                 new_shape = (self._force.shape[0] + 1,) + self._force.shape[1:]
                 self._force.resize(new_shape)
             self._force[i, :] = ts.forces
-
+        # NOTE: Fix me. add observables
         #if self.convert_units:
         #    self._convert_dataset_with_units(i)
 
@@ -918,17 +823,17 @@ class ZarrTrajWriter(base.WriterBase):
     @property
     def has_positions(self):
         """``True`` if writer is writing positions from Timestep."""
-        return self._has['position']
+        return "positions" in self._has
 
     @property
     def has_velocities(self):
         """``True`` if writer is writing velocities from Timestep."""
-        return self._has['velocity']
+        return "velocities" in self._has
 
     @property
     def has_forces(self):
         """``True`` if writer is writing forces from Timestep."""
-        return self._has['force']
+        return "forces" in self._has
 
 ### Developer utils ###
 def get_frame_size(universe):

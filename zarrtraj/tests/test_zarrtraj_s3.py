@@ -242,8 +242,6 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
             with tmpdir.as_cwd():
                 with ref.writer(outfile, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
-                            chunks=(5, universe.trajectory.n_atoms, 3),
-                            max_memory=520,
                             format='ZARRTRAJ') as W:
                     for ts in universe.trajectory:
                         universe.dimensions[:3] += 1
@@ -268,8 +266,6 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
         with tmpdir.as_cwd():
             with ref.writer(outfile, sel.n_atoms,
                             n_frames=universe.trajectory.n_frames,
-                            chunks=(5, sel.n_atoms, 3),
-                            max_memory=520,
                             format='ZARRTRAJ') as W:
                 for ts in universe.trajectory:
                     W.write(sel.atoms)
@@ -298,9 +294,8 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
 
         copy_ts = universe.trajectory.ts.copy()
         with tmpdir.as_cwd():
-            with ref.writer(outfile, n_atoms=5, n_frames=1, 
-                            chunks=(1, universe.trajectory.n_atoms, 3),
-                            max_memory=104, format='ZARRTRAJ') as W:
+            with ref.writer(outfile, n_atoms=5, n_frames=1,
+                            format='ZARRTRAJ') as W:
                 W.write(universe)
                 assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
 
@@ -310,8 +305,6 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
         with tmpdir.as_cwd():
             with ref.writer(outfile, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
-                            chunks=(5, universe.trajectory.n_atoms, 3),
-                            max_memory=520,
                             format='ZARRTRAJ') as w:
                 for ts in universe.trajectory:
                     w.write(universe.atoms)
@@ -323,8 +316,6 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
         with tmpdir.as_cwd():
             with ref.writer(outfile, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
-                            chunks=(5, universe.trajectory.n_atoms, 3),
-                            max_memory=520,
                             format='ZARRTRAJ') as w:
                 for ts in universe.trajectory:
                     w.write(universe)
@@ -337,8 +328,6 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
             with pytest.raises(ValueError):
                 with ref.writer(outfile, universe.atoms.n_atoms,
                                 n_frames=universe.trajectory.n_frames,
-                                chunks=(1, universe.trajectory.n_atoms, 3),
-                                max_memory=223,
                                 format='ZARRTRAJ') as w:
                     for ts in universe.trajectory:
                         w.write(universe)
