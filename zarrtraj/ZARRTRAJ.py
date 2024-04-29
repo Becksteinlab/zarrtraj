@@ -715,31 +715,31 @@ class ZarrTrajWriter(base.WriterBase):
                              "dataset must increase monotonically in value.")
         self._prev_step = curr_step
 
-        if self.units.attrs['time'] is not None:
+        if self.units['time'] is not None:
             self._time_buffer[buffer_index] = self.convert_time_to_native(ts.time)
         else:
             self._time_buffer[buffer_index] = ts.time
     
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
-            if self.units.attrs['length'] is not None:
+            if self.units['length'] is not None:
                 self._edges_buffer[buffer_index, :] = self.convert_pos_to_native(ts.triclinic_dimensions)
             else:
                 self._edges_buffer[buffer_index, :] = ts.triclinic_dimensions
 
         if self.has_positions:
-            if self.units.attrs['length'] is not None:
+            if self.units['length'] is not None:
                 self._pos_buffer[buffer_index, :] = self.convert_pos_to_native(ts.positions)
             else:
                 self._pos_buffer[buffer_index, :] = ts.positions
 
         if self.has_velocities:
-            if self.units.attrs['velocity'] is not None:
+            if self.units['velocity'] is not None:
                 self._vel_buffer[buffer_index, :] = self.convert_velocities_to_native(ts.velocities)
             else:
                 self._vel_buffer[buffer_index, :] = ts.velocities
 
         if self.has_forces:
-            if self.units.attrs['force'] is not None:
+            if self.units['force'] is not None:
                 self._force_buffer[buffer_index, :] = self.convert_forces_to_native(ts.forces)
             else:
                 self._force_buffer[buffer_index, :] = ts.forces
@@ -749,7 +749,7 @@ class ZarrTrajWriter(base.WriterBase):
                 (i == self.n_frames - 1)):
             da.from_array(self._step_buffer[:buffer_index + 1]).to_zarr(self._step, region=(slice(i - buffer_index, i + 1),))
             da.from_array(self._time_buffer[:buffer_index + 1]).to_zarr(self._time, region=(slice(i - buffer_index, i + 1),))
-            if self._has_edges:
+            if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
                 da.from_array(self._edges_buffer[:buffer_index + 1]).to_zarr(self._edges, region=(slice(i - buffer_index, i + 1),))
             if self.has_positions:
                 da.from_array(self._pos_buffer[:buffer_index + 1]).to_zarr(self._pos, region=(slice(i - buffer_index, i + 1),))
