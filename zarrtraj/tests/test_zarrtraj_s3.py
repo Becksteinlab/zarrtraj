@@ -112,7 +112,6 @@ class ZARRTRAJAWSReference(BaseReference):
     copied from test_xdr.TRRReference"""
     def __init__(self):
         super(ZARRTRAJAWSReference, self).__init__()
-        # self.trajectory already setup in setup_class
         self.trajectory = zarr_file_to_s3_bucket(COORDINATES_ZARRTRAJ)
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
@@ -158,7 +157,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
     def reset_server(self):
         yield
         requests.post("http://localhost:5000/moto-api/reset")
-        
+
     @staticmethod
     @pytest.fixture()
     def ref():
@@ -214,7 +213,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
 
 
 @pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
-class TestZarrTrajWriterBaseAPI(BaseWriterTest):
+class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     """Tests ZarrTrajWriter with with synthetic trajectory."""
 
 
@@ -328,6 +327,8 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
             with pytest.raises(ValueError):
                 with ref.writer(outfile, universe.atoms.n_atoms,
                                 n_frames=universe.trajectory.n_frames,
+                                chunks=(1, universe.trajectory.n_atoms, 3),
+                                max_memory=223,
                                 format='ZARRTRAJ') as w:
                     for ts in universe.trajectory:
                         w.write(universe)
@@ -348,7 +349,7 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
 
 # Helper Functions
 def get_memory_usage(writer):
-    mem = (writer._time_buffer.nbytes + writer._step_buffer.nbytes + 
-           writer._edges_buffer.nbytes + writer._pos_buffer.nbytes + 
+    mem = (writer._time_buffer.nbytes + writer._step_buffer.nbytes +
+           writer._dimensions_buffer.nbytes + writer._pos_buffer.nbytes +
            writer._force_buffer.nbytes + writer._vel_buffer.nbytes)
     return mem
