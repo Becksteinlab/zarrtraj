@@ -1,6 +1,6 @@
 {
-    "force": "kJ mol-1 Angstrom-1",
-    "length": "Angstrom",
+    "force": "kJ/(mol*nm)",
+    "length": "nm",
     "time": "ps",
-    "velocity": "Angstrom ps-1"
+    "velocity": "nm/ps"
 }
