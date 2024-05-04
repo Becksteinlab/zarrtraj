@@ -49,7 +49,7 @@ jobs:
           - macOS-latest
           - ubuntu-latest
           - windows-latest
-        python-version: ${{ fromJSON(needs.environment-config.outputs.python-matrix) }}
+        python-version: ["3.10", "3.11", "3.12"]
         mdanalysis-version:
           - latest
           - develop
