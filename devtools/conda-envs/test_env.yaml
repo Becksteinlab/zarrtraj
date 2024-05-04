@@ -21,7 +21,7 @@ dependencies:
   # AWS testing
   - moto=5.0.3
 
-  ### Testing ###
+  ### General testing ###
   - MDAnalysisTests>=2.7.0
   - pytest>=7.4.0
   - pytest-xdist>=3.5.0
@@ -30,6 +30,9 @@ dependencies:
 
   ### Notebooks ###
   - jupyter
+
+  ### Benchmarking ###
+  - asv
 
   # Pip-only installs
   # - pip:

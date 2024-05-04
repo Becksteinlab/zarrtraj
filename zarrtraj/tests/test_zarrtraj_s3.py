@@ -27,9 +27,13 @@ from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
                                               assert_array_almost_equal)
 from .conftest import ZARRTRAJReference
 import requests
+# Must ensure unique bucket name is created for GH actions
+import uuid
 
 # Only call this once a Moto Server is running
 def zarr_file_to_s3_bucket(fname):
+    bucket_name = f"testbucket-{uuid.uuid4()}"
+
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
@@ -42,7 +46,7 @@ def zarr_file_to_s3_bucket(fname):
         region_name="us-east-1",
         endpoint_url="http://localhost:5000"
     )
-    s3_resource.create_bucket(Bucket="testbucket")
+    s3_resource.create_bucket(Bucket=bucket_name)
 
     source = zarr.open_group(fname, mode='r')
 
@@ -54,7 +58,7 @@ def zarr_file_to_s3_bucket(fname):
         )
     )
     cloud_store = s3fs.S3Map(
-        root=f'testbucket/{os.path.basename(fname)}',
+        root=f'{bucket_name}/{os.path.basename(fname)}',
         s3=s3_fs,
         check=False
     )
@@ -67,7 +71,8 @@ def zarr_file_to_s3_bucket(fname):
 
 # Only call this once a Moto Server is running
 def new_zarrgroup_in_bucket(fname):
-    
+    bucket_name = f"testbucket-{uuid.uuid4()}"
+
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
@@ -80,7 +85,7 @@ def new_zarrgroup_in_bucket(fname):
         region_name="us-east-1",
         endpoint_url="http://localhost:5000"
     )
-    s3_resource.create_bucket(Bucket="testbucket")
+    s3_resource.create_bucket(Bucket=bucket_name)
 
     s3_fs = s3fs.S3FileSystem(
         anon=False,
@@ -90,7 +95,7 @@ def new_zarrgroup_in_bucket(fname):
         )
     )
     cloud_store = s3fs.S3Map(
-        root=f'testbucket/{os.path.basename(fname)}',
+        root=f'{bucket_name}/{os.path.basename(fname)}',
         s3=s3_fs,
         check=False
     )
@@ -140,7 +145,7 @@ class ZARRTRAJAWSReference(BaseReference):
         ts.time = i
         ts.frame = i
         return ts
-    
+
 
 @pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
 class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
@@ -240,8 +245,8 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
             outfile = new_zarrgroup_in_bucket(outfn)
             with tmpdir.as_cwd():
                 with ref.writer(outfile, universe.atoms.n_atoms,
-                            n_frames=universe.trajectory.n_frames,
-                            format='ZARRTRAJ') as W:
+                                n_frames=universe.trajectory.n_frames,
+                                format='ZARRTRAJ') as W:
                     for ts in universe.trajectory:
                         universe.dimensions[:3] += 1
                         W.write(universe)
@@ -260,7 +265,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         sel = universe.select_atoms(sel_str)
         outfn = 'write-selection-test.' + ref.ext
         outfile = new_zarrgroup_in_bucket(outfn)
-
 
         with tmpdir.as_cwd():
             with ref.writer(outfile, sel.n_atoms,
@@ -319,7 +323,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 for ts in universe.trajectory:
                     w.write(universe)
             self._check_copy(outfile, ref, reader)
-    
+
     def test_max_memory_too_low(self, ref, reader, universe, tmpdir):
         outfn = 'write-max-memory-test.' + ref.ext
         outfile = new_zarrgroup_in_bucket(outfn)
