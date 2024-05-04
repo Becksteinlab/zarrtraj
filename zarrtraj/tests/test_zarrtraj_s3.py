@@ -46,7 +46,9 @@ def zarr_file_to_s3_bucket(fname):
         region_name="us-west-1",
         endpoint_url="http://localhost:5000"
     )
-    s3_resource.create_bucket(Bucket=bucket_name)
+    s3_resource.create_bucket(Bucket=bucket_name,
+                              CreateBucketConfiguration={'LocationConstraint':
+                                                         'us-west-1'})
 
     source = zarr.open_group(fname, mode='r')
 
@@ -85,7 +87,9 @@ def new_zarrgroup_in_bucket(fname):
         region_name="us-west-1",
         endpoint_url="http://localhost:5000"
     )
-    s3_resource.create_bucket(Bucket=bucket_name)
+    s3_resource.create_bucket(Bucket=bucket_name,
+                              CreateBucketConfiguration={'LocationConstraint':
+                                                         'us-west-1'})
 
     s3_fs = s3fs.S3FileSystem(
         anon=False,
