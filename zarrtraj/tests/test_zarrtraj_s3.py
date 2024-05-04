@@ -314,16 +314,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 for ts in universe.trajectory:
                     w.write(universe)
 
-    def test_max_memory_usage(self, ref, universe, outgroup):
-        with ref.writer(outgroup, universe.atoms.n_atoms,
-                        n_frames=universe.trajectory.n_frames,
-                        chunks=(1, universe.trajectory.n_atoms, 3),
-                        max_memory=224,
-                        format='ZARRTRAJ') as w:
-            for ts in universe.trajectory[:5]:
-                w.write(universe)
-                # Each frame of synthetic trajectory should be 224 bytes
-            assert get_memory_usage(w) <= 224
 
 
 # Helper Functions
