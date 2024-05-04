@@ -160,8 +160,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
 
     # Only create one ref to avoid high memory usage
     @pytest.fixture(scope='class')
-    @staticmethod
-    def ref():
+    def ref(self):
         r = ZARRTRAJAWSReference()
         yield r
 
@@ -226,9 +225,8 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         self.server.stop()
 
     @pytest.fixture(scope='class')
-    @staticmethod
-    def outgroup():
-        r = new_zarrgroup_in_bucket("test-write.zarrtraj") 
+    def outgroup(self):
+        r = new_zarrgroup_in_bucket("test-write.zarrtraj")
         yield r
 
     # After each test, clear the cloud zarr group
