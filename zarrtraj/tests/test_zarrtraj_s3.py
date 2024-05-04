@@ -30,6 +30,7 @@ import requests
 # Must ensure unique bucket name is created for GH actions
 import uuid
 
+
 # Only call this once a Moto Server is running
 def zarr_file_to_s3_bucket(fname):
     bucket_name = f"testbucket-{uuid.uuid4()}"
@@ -68,8 +69,9 @@ def zarr_file_to_s3_bucket(fname):
     zarr.convenience.copy_store(source.store, cloud_store,
                                 if_exists='replace')
 
-    cloud_dest = zarr.open_group(store=cloud_store, mode='a')
+    cloud_dest = zarr.open_group(store=cloud_store, mode='r')
     return cloud_dest
+
 
 # Only call this once a Moto Server is running
 def new_zarrgroup_in_bucket(fname):
@@ -108,12 +110,6 @@ def new_zarrgroup_in_bucket(fname):
 
     return cloud_dest
 
-# Helper function to calculate the memory usage of a writer at a frame
-def get_memory_usage(writer):
-    mem = (writer._time_buffer.nbytes + writer._step_buffer.nbytes + 
-           writer._edges_buffer.nbytes + writer._pos_buffer.nbytes + 
-           writer._force_buffer.nbytes + writer._vel_buffer.nbytes)
-    return mem
 
 @pytest.mark.skipif(not HAS_ZARR, reason="Zarr not installed")
 class ZARRTRAJAWSReference(BaseReference):
@@ -162,17 +158,12 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
         yield
         self.server.stop()
 
-    @pytest.fixture(autouse=True)
-    def reset_server(self):
-        yield
-        requests.post("http://localhost:5000/moto-api/reset")
-
+    # Only create one ref to avoid high memory usage
+    @pytest.fixture(scope='class')
     @staticmethod
-    @pytest.fixture()
     def ref():
-        yield ZARRTRAJAWSReference()
-
-
+        r = ZARRTRAJAWSReference()
+        yield r
 
     def test_get_writer_1(self, ref, reader, tmpdir):
         with tmpdir.as_cwd():
@@ -224,136 +215,118 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
 @pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
 class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     """Tests ZarrTrajWriter with with synthetic trajectory."""
-
-
+    # Run one moto server for the entire class
+    # And only keep one zarr group to write to
     @pytest.fixture(autouse=True, scope='class')
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
+        self.outgroup = new_zarrgroup_in_bucket("test-write.zarrtraj")
         yield
         self.server.stop()
 
+    @pytest.fixture(scope='class')
+    @staticmethod
+    def outgroup():
+        r = new_zarrgroup_in_bucket("test-write.zarrtraj") 
+        yield r
+
+    # After each test, clear the cloud zarr group
     @pytest.fixture(autouse=True)
-    def reset_server(self):
+    def clear_outgroup(self, outgroup):
         yield
-        requests.post("http://localhost:5000/moto-api/reset")
+        outgroup.clear()
 
     @staticmethod
     @pytest.fixture()
     def ref():
         yield ZARRTRAJReference()
 
-    def test_write_different_box(self, ref, universe, tmpdir):
+    def test_write_different_box(self, ref, universe, outgroup):
         if ref.changing_dimensions:
-            outfn = 'write-dimensions-test' + ref.ext
-            outfile = new_zarrgroup_in_bucket(outfn)
-            with tmpdir.as_cwd():
-                with ref.writer(outfile, universe.atoms.n_atoms,
-                                n_frames=universe.trajectory.n_frames,
-                                format='ZARRTRAJ') as W:
-                    for ts in universe.trajectory:
-                        universe.dimensions[:3] += 1
-                        W.write(universe)
-
-                written = ref.reader(outfile)
-
-                for ts_ref, ts_w in zip(universe.trajectory, written):
+            with ref.writer(outgroup, universe.atoms.n_atoms,
+                            n_frames=universe.trajectory.n_frames,
+                            format='ZARRTRAJ') as W:
+                for ts in universe.trajectory:
                     universe.dimensions[:3] += 1
-                    assert_array_almost_equal(universe.dimensions,
-                                              ts_w.dimensions,
-                                              decimal=ref.prec)
+                    W.write(universe)
+            written = ref.reader(outgroup)
+
+            for ts_ref, ts_w in zip(universe.trajectory, written):
+                universe.dimensions[:3] += 1
+                assert_array_almost_equal(universe.dimensions,
+                                          ts_w.dimensions,
+                                          decimal=ref.prec)
 
     def test_write_selection(self, ref, reader, universe, u_no_resnames,
-                             u_no_resids, u_no_names, tmpdir):
+                             u_no_resids, u_no_names, outgroup):
         sel_str = 'resid 1'
         sel = universe.select_atoms(sel_str)
-        outfn = 'write-selection-test.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
 
-        with tmpdir.as_cwd():
-            with ref.writer(outfile, sel.n_atoms,
-                            n_frames=universe.trajectory.n_frames,
-                            format='ZARRTRAJ') as W:
-                for ts in universe.trajectory:
-                    W.write(sel.atoms)
+        with ref.writer(outgroup, sel.n_atoms,
+                        n_frames=universe.trajectory.n_frames,
+                        format='ZARRTRAJ') as W:
+            for ts in universe.trajectory:
+                W.write(sel.atoms)
+        copy = ref.reader(outgroup)
+        for orig_ts, copy_ts in zip(universe.trajectory, copy):
+            assert_array_almost_equal(
+                copy_ts._pos, sel.atoms.positions, ref.prec,
+                err_msg="coordinate mismatch between original and written "
+                        "trajectory at frame {} (orig) vs {} (copy)".format(
+                            orig_ts.frame, copy_ts.frame))
 
-            copy = ref.reader(outfile)
-            for orig_ts, copy_ts in zip(universe.trajectory, copy):
-                assert_array_almost_equal(
-                    copy_ts._pos, sel.atoms.positions, ref.prec,
-                    err_msg="coordinate mismatch between original and written "
-                            "trajectory at frame {} (orig) vs {} (copy)".format(
-                        orig_ts.frame, copy_ts.frame))
-                
-    def test_write_none(self, ref, tmpdir):
-        outfn = 'write-none.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
-        with tmpdir.as_cwd():
-            with pytest.raises(TypeError):
-                with ref.writer(outfile, 42, n_frames=1,
-                                max_memory=1, 
-                                chunks=(1, 5, 3), format='ZARRTRAJ') as w:
-                    w.write(None)
+    def test_write_none(self, ref, outgroup):
+        with pytest.raises(TypeError):
+            with ref.writer(outgroup, 42, n_frames=1,
+                            max_memory=1,
+                            chunks=(1, 5, 3), format='ZARRTRAJ') as w:
+                w.write(None)
 
-    def test_write_not_changing_ts(self, ref, universe, tmpdir):
-        outfn = 'write-not-changing-ts.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
-
+    def test_write_not_changing_ts(self, ref, universe, outgroup):
         copy_ts = universe.trajectory.ts.copy()
-        with tmpdir.as_cwd():
-            with ref.writer(outfile, n_atoms=5, n_frames=1,
-                            format='ZARRTRAJ') as W:
-                W.write(universe)
-                assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
+        with ref.writer(outgroup, n_atoms=5, n_frames=1,
+                        format='ZARRTRAJ') as W:
+            W.write(universe)
+            assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
 
-    def test_write_trajectory_atomgroup(self, ref, reader, universe, tmpdir):
-        outfn = 'write-atoms-test.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
-        with tmpdir.as_cwd():
-            with ref.writer(outfile, universe.atoms.n_atoms,
-                            n_frames=universe.trajectory.n_frames,
-                            format='ZARRTRAJ') as w:
-                for ts in universe.trajectory:
-                    w.write(universe.atoms)
-            self._check_copy(outfile, ref, reader)
+    def test_write_trajectory_atomgroup(self, ref, reader, universe, outgroup):
+        with ref.writer(outgroup, universe.atoms.n_atoms,
+                        n_frames=universe.trajectory.n_frames,
+                        format='ZARRTRAJ') as w:
+            for ts in universe.trajectory:
+                w.write(universe.atoms)
+        self._check_copy(outgroup, ref, reader)
 
-    def test_write_trajectory_universe(self, ref, reader, universe, tmpdir):
-        outfn = 'write-uni-test.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
-        with tmpdir.as_cwd():
-            with ref.writer(outfile, universe.atoms.n_atoms,
-                            n_frames=universe.trajectory.n_frames,
-                            format='ZARRTRAJ') as w:
-                for ts in universe.trajectory:
-                    w.write(universe)
-            self._check_copy(outfile, ref, reader)
+    def test_write_trajectory_universe(self, ref, reader, universe, outgroup):
+        with ref.writer(outgroup, universe.atoms.n_atoms,
+                        n_frames=universe.trajectory.n_frames,
+                        format='ZARRTRAJ') as w:
+            for ts in universe.trajectory:
+                w.write(universe)
+        self._check_copy(outgroup, ref, reader)
 
-    def test_max_memory_too_low(self, ref, reader, universe, tmpdir):
-        outfn = 'write-max-memory-test.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
-        with tmpdir.as_cwd():
-            with pytest.raises(ValueError):
-                with ref.writer(outfile, universe.atoms.n_atoms,
-                                n_frames=universe.trajectory.n_frames,
-                                chunks=(1, universe.trajectory.n_atoms, 3),
-                                max_memory=223,
-                                format='ZARRTRAJ') as w:
-                    for ts in universe.trajectory:
-                        w.write(universe)
-
-    def test_max_memory_usage(self, ref, reader, universe, tmpdir):
-        outfn = 'write-max-memory-test.' + ref.ext
-        outfile = new_zarrgroup_in_bucket(outfn)
-        with tmpdir.as_cwd():
-            with ref.writer(outfile, universe.atoms.n_atoms,
+    def test_max_memory_too_low(self, ref, reader, universe, outgroup):
+        with pytest.raises(ValueError):
+            with ref.writer(outgroup, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
                             chunks=(1, universe.trajectory.n_atoms, 3),
-                            max_memory=224,
+                            max_memory=223,
                             format='ZARRTRAJ') as w:
                 for ts in universe.trajectory:
                     w.write(universe)
-                    # Each frame of synthetic trajectory should be 224 bytes
-                    assert get_memory_usage(w) <= 224
+
+    def test_max_memory_usage(self, ref, reader, universe, outgroup):
+        with ref.writer(outgroup, universe.atoms.n_atoms,
+                        n_frames=universe.trajectory.n_frames,
+                        chunks=(1, universe.trajectory.n_atoms, 3),
+                        max_memory=224,
+                        format='ZARRTRAJ') as w:
+            for ts in universe.trajectory:
+                w.write(universe)
+                # Each frame of synthetic trajectory should be 224 bytes
+                assert get_memory_usage(w) <= 224
+
 
 # Helper Functions
 def get_memory_usage(writer):

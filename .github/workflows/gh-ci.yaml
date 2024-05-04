@@ -151,8 +151,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ needs.environment-config.outputs.stable-python-version
-          }}
+      - name: Set up Python ${{ needs.environment-config.outputs.stable-python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ needs.environment-config.outputs.stable-python-version }}
