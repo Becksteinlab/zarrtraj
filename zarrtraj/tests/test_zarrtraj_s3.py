@@ -43,7 +43,7 @@ def zarr_file_to_s3_bucket(fname):
     # Need granular control
     s3_resource = boto3.resource(
         "s3",
-        region_name="us-east-1",
+        region_name="us-west-1",
         endpoint_url="http://localhost:5000"
     )
     s3_resource.create_bucket(Bucket=bucket_name)
@@ -53,7 +53,7 @@ def zarr_file_to_s3_bucket(fname):
     s3_fs = s3fs.S3FileSystem(
         anon=False,
         client_kwargs=dict(
-            region_name='us-east-1',
+            region_name='us-west-1',
             endpoint_url="http://localhost:5000"
         )
     )
@@ -82,7 +82,7 @@ def new_zarrgroup_in_bucket(fname):
     # Need granular control
     s3_resource = boto3.resource(
         "s3",
-        region_name="us-east-1",
+        region_name="us-west-1",
         endpoint_url="http://localhost:5000"
     )
     s3_resource.create_bucket(Bucket=bucket_name)
@@ -90,7 +90,7 @@ def new_zarrgroup_in_bucket(fname):
     s3_fs = s3fs.S3FileSystem(
         anon=False,
         client_kwargs=dict(
-            region_name='us-east-1',
+            region_name='us-west-1',
             endpoint_url="http://localhost:5000"
         )
     )
