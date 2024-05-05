@@ -223,16 +223,11 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         yield
         self.server.stop()
 
-    @pytest.fixture(scope='class')
+    @pytest.fixture
     def outgroup(self):
         r = new_zarrgroup_in_bucket("test-write.zarrtraj")
         yield r
-
-    # After each test, clear the cloud zarr group
-    @pytest.fixture(autouse=True)
-    def clear_outgroup(self, outgroup):
-        yield
-        outgroup.clear()
+        zarr.storage.rmdir(r.store)
 
     @staticmethod
     @pytest.fixture()
