@@ -93,7 +93,7 @@ class ZARRTRAJAWSReference(BaseReference):
     copied from test_xdr.TRRReference"""
     def __init__(self):
         super(ZARRTRAJAWSReference, self).__init__()
-        self.trajectory = put_zarrtraj_in_bucket(COORDINATES_ZARRTRAJ)
+        self.trajectory = put_zarrtraj_in_bucket(COORDINATES_ZARRTRAJ, "testbucket")
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
         self.writer = zarrtraj.ZarrTrajWriter
@@ -203,7 +203,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
 
     @pytest.fixture()
     def outgroup(self):
-        r = new_zarrgroup_in_bucket("test-write.zarrtraj")
+        r = new_zarrgroup_in_bucket("test-write.zarrtraj", "testbucket")
         yield r
         zarr.storage.rmdir(r.store)
 
