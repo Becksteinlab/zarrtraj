@@ -104,6 +104,9 @@ jobs:
           conda list
 
       - name: Run tests
+        # Tests must be sequential to avoid 
+        # moto buckets and groups interfering with
+        # one another
         run: |
           pytest -v --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
 

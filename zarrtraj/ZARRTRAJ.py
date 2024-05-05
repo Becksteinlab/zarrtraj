@@ -42,10 +42,10 @@ reduce I/O::
 
     # max_size is cache size in bytes
     cache = LRUStoreCache(cloud_store, max_size=2**25)
-    root = zarr.group(store=cache)
-    u = mda.Universe("topology.tpr", root)
+    zgroup = zarr.group(store=cache)
+    u = mda.Universe("topology.tpr", zgroup)
 
-Because of this local cache model, random-access trajectory reading for 
+Because of this local cache model, random-access trajectory reading for
 cloud-backed Zarr Groups is not currently supported.
 
 Example: Writing to cloud services
@@ -60,14 +60,24 @@ To write to a `zarr.Group` from a trajectory loaded in MDAnalysis, do::
     import s3fs
     import zarrtraj
     import MDAnalysis as mda
-    key = os.getenv('AWS_KEY')
-    secret = os.getenv('AWS_SECRET_KEY')
-    s3 = s3fs.S3FileSystem(key=key, secret=secret)
-    store = s3fs.S3Map(root='<bucket-name>/trajectory.zarrtraj', s3=s3, check=False)
-    root = zarr.open_group(store=store)
-    with mda.Writer(root, u.trajectory.n_atoms, n_frames=u.trajectory.n_frames, 
-                    chunks=(10, u.trajectory.n_atoms, 3),
-                    max_memory=2**20,
+
+    s3 = s3fs.S3FileSystem(
+        anon=False,
+        profile='sample_profile',
+        client_kwargs=dict(
+            region_name='us-east-1''
+            )
+    )
+
+    cloud_store = s3fs.S3Map(
+        root='<bucket-name>/trajectory.zarrtraj',
+        s3=s3,
+        check=False
+    )
+
+    zgroup = zarr.open_group(store=cloud_store)
+    with mda.Writer(zgroup, u.trajectory.n_atoms,
+                    n_frames=u.trajectory.n_frames,
                     format='ZARRTRAJ') as w:
         for ts in u.trajectory:
             w.write(u.atoms)
@@ -84,7 +94,6 @@ Classes
    :inherited-members:
 """
 
-
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.coordinates import base, core
@@ -93,7 +102,6 @@ from MDAnalysis.due import due, Doi
 from MDAnalysis.lib.util import store_init_arguments
 import dask.array as da
 from enum import Enum
-import time # NOTE: REMOVE after test
 
 
 try:
@@ -613,12 +621,14 @@ class ZarrTrajWriter(base.WriterBase):
                 self._check_max_memory()
                 self._initialize_zarr_datasets(ts)
                 self._initialize_memory_buffers()
-                # pylint: disable=method-hidden
-                self._write_next_timestep = self._write_next_cloud_timestep
             else:
                 self._initialize_zarr_datasets(ts)
             self._initial_write = False
-        return self._write_next_timestep(ts)
+
+        if self._is_cloud_storage:
+            return self._write_next_cloud_timestep(ts)
+        else:
+            return self._write_next_timestep(ts)
 
     def _determine_units(self, ag):
         """Verifies the trajectory contains all
