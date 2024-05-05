@@ -28,12 +28,7 @@ from .conftest import ZARRTRAJReference
 import requests
 import numpy as np
 
-
-
-# Only call this once a Moto Server is running
-def zarr_file_to_s3_bucket(fname):
-    bucket_name = "testbucket"
-
+def create_bucket(bucket_name):
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
@@ -50,6 +45,8 @@ def zarr_file_to_s3_bucket(fname):
                               CreateBucketConfiguration={'LocationConstraint':
                                                          'us-west-1'})
 
+# Only call this once a Moto Server is running
+def put_zarrtraj_in_bucket(fname, bucket_name):
     source = zarr.open_group(fname, mode='r')
 
     s3_fs = s3fs.S3FileSystem(
@@ -73,25 +70,7 @@ def zarr_file_to_s3_bucket(fname):
 
 
 # Only call this once a Moto Server is running
-def new_zarrgroup_in_bucket(fname):
-    bucket_name = f"testbucket"
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-
-    # Using boto3.resource rather than .client since we don't
-    # Need granular control
-    s3_resource = boto3.resource(
-        "s3",
-        region_name="us-west-1",
-        endpoint_url="http://localhost:5000"
-    )
-    s3_resource.create_bucket(Bucket=bucket_name,
-                              CreateBucketConfiguration={'LocationConstraint':
-                                                         'us-west-1'})
-
+def new_zarrgroup_in_bucket(fname, bucket_name):
     s3_fs = s3fs.S3FileSystem(
         anon=False,
         client_kwargs=dict(
@@ -104,9 +83,7 @@ def new_zarrgroup_in_bucket(fname):
         s3=s3_fs,
         check=False
     )
-
     cloud_dest = zarr.open_group(store=cloud_store, mode='a')
-
     return cloud_dest
 
 
@@ -116,7 +93,7 @@ class ZARRTRAJAWSReference(BaseReference):
     copied from test_xdr.TRRReference"""
     def __init__(self):
         super(ZARRTRAJAWSReference, self).__init__()
-        self.trajectory = zarr_file_to_s3_bucket(COORDINATES_ZARRTRAJ)
+        self.trajectory = put_zarrtraj_in_bucket(COORDINATES_ZARRTRAJ)
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
         self.writer = zarrtraj.ZarrTrajWriter
@@ -154,6 +131,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
+        create_bucket("testbucket")
         yield
         self.server.stop()
 
@@ -219,10 +197,11 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
+        create_bucket("testbucket")
         yield
         self.server.stop()
 
-    @pytest.fixture
+    @pytest.fixture()
     def outgroup(self):
         r = new_zarrgroup_in_bucket("test-write.zarrtraj")
         yield r
