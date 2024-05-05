@@ -5,7 +5,6 @@ in an AWS S3 bucket
 
 import pytest
 import os
-from moto import mock_aws
 # While debugging and server is running, visit http://localhost:5000/moto-api
 from moto.server import ThreadedMotoServer
 import boto3

@@ -1,31 +1,23 @@
-# Write the benchmarking functions here.
-# See "Writing benchmarks" in the asv docs for more information.
+from zarrtraj import *
 
+class TrajReaderDiskIteration(object):
+    """Benchmarks for zarrtraj file striding."""
+    # parameterize the input zarr group
+    # these zarr groups should vary on
+    # long vs short traj length, compression, filters, chunking
+    # reads should be parameterized based on LRU cache- size + presence
+    params = ([])
+    param_names = ['traj_length', 'compressor', 'filters', 'chunks', 'cache']
 
-class TimeSuite:
-    """
-    An example benchmark that times the performance of various kinds
-    of iterating over dictionaries in Python.
-    """
     def setup(self):
-        self.d = {}
-        for x in range(500):
-            self.d[x] = None
+        self.traj_file, self.traj_reader = [ZARRTRAJ, ZarrTrajReader]
+        self.reader_object = self.traj_reader(self.traj_file)
 
-    def time_keys(self):
-        for key in self.d.keys():
+    def time_strides(self):
+        """Benchmark striding over full trajectory
+        test files for each format.
+        """
+        for ts in self.reader_object:
             pass
 
-    def time_values(self):
-        for value in self.d.values():
-            pass
-
-    def time_range(self):
-        d = self.d
-        for key in range(500):
-            x = d[key]
-
-
-class MemSuite:
-    def mem_list(self):
-        return [0] * 256
+class TrajReaderAWSIterations
