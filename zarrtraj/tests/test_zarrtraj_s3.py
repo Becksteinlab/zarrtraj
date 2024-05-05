@@ -93,7 +93,7 @@ class ZARRTRAJAWSReference(BaseReference):
     copied from test_xdr.TRRReference"""
     def __init__(self):
         super(ZARRTRAJAWSReference, self).__init__()
-        self.trajectory = put_zarrtraj_in_bucket(COORDINATES_ZARRTRAJ, "testbucket")
+        self.trajectory = put_zarrtraj_in_bucket(COORDINATES_ZARRTRAJ, "test-read-bucket")
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
         self.writer = zarrtraj.ZarrTrajWriter
@@ -131,7 +131,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
-        create_bucket("testbucket")
+        create_bucket("test-read-bucket")
         yield
         self.server.stop()
 
@@ -197,13 +197,13 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
-        create_bucket("testbucket")
+        create_bucket("test-write-bucket, bucket")
         yield
         self.server.stop()
 
     @pytest.fixture()
     def outgroup(self):
-        r = new_zarrgroup_in_bucket("test-write.zarrtraj", "testbucket")
+        r = new_zarrgroup_in_bucket("test-write.zarrtraj", "test-write-bucket")
         yield r
         zarr.storage.rmdir(r.store)
 
