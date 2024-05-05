@@ -526,8 +526,8 @@ class ZarrTrajWriter(base.WriterBase):
         if creator == 'MDAnalysis':
             self._file['metadata'].attrs['creator_version'] = creator_version
 
-        self._determine_if_cloud_storage()
-        if self._is_cloud_storage or self.force_buffered:
+        self._determine_if_buffered_storage()
+        if self._is_buffered_store:
             # Ensure n_frames exists
             if n_frames is None:
                 raise TypeError("ZarrTrajWriter: Buffered writing requires " +
@@ -563,7 +563,7 @@ class ZarrTrajWriter(base.WriterBase):
 
         self._initial_write = True
 
-    def _determine_if_cloud_storage(self):
+    def _determine_if_buffered_storage(self):
         # Check if we are working with a cloud storage type
         store = self._file.store
         if isinstance(store, zarr.storage.FSStore):
@@ -575,7 +575,7 @@ class ZarrTrajWriter(base.WriterBase):
                 except ImportError:
                     raise Exception("Writing to AWS S3 requires installing " +
                                     + "s3fs")
-                self._is_cloud_storage = True
+                self._is_buffered_store = True
             elif 'gcs' in store.fs.protocol:
                 # Verify gcsfs is installed
                 try:
@@ -583,11 +583,13 @@ class ZarrTrajWriter(base.WriterBase):
                 except ImportError:
                     raise Exception("Writing to Google Cloud Storage " +
                                     + "requires installing gcsfs")
-                self._is_cloud_storage = True
+                self._is_buffered_store = True
         elif isinstance(store, zarr.storage.ABSStore):
-            self._is_cloud_storage = True
+            self._is_buffered_store = True
+        elif self.force_buffered:
+            self._is_buffered_store = True
         else:
-            self._is_cloud_storage = False
+            self._is_buffered_store = False
 
     def _write_next_frame(self, ag):
         """Write information associated with ``ag`` at current frame
@@ -617,7 +619,7 @@ class ZarrTrajWriter(base.WriterBase):
         if self._initial_write:
             self._determine_has(ts)
             self._determine_units(ag)
-            if self._is_cloud_storage:
+            if self._is_buffered_store:
                 self._check_max_memory()
                 self._initialize_zarr_datasets(ts)
                 self._initialize_memory_buffers()
@@ -625,8 +627,8 @@ class ZarrTrajWriter(base.WriterBase):
                 self._initialize_zarr_datasets(ts)
             self._initial_write = False
 
-        if self._is_cloud_storage:
-            return self._write_next_cloud_timestep(ts)
+        if self._is_buffered_store:
+            return self._write_next_buffered_timestep(ts)
         else:
             return self._write_next_timestep(ts)
 
@@ -801,7 +803,7 @@ class ZarrTrajWriter(base.WriterBase):
         # Reduce cloud I/O by storing previous step val for error checking
         self._prev_step = None
 
-    def _write_next_cloud_timestep(self, ts):
+    def _write_next_buffered_timestep(self, ts):
         """Write the next timestep to a cloud or buffered zarr group.
         Will only actually perform write if buffer is full"""
         i = self._counter

@@ -238,6 +238,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         if ref.changing_dimensions:
             with ref.writer(outgroup, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
+                            force_buffered=True,
                             format='ZARRTRAJ') as W:
                 for ts in universe.trajectory:
                     universe.dimensions[:3] += 1
@@ -257,6 +258,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
 
         with ref.writer(outgroup, sel.n_atoms,
                         n_frames=universe.trajectory.n_frames,
+                        force_buffered=True,
                         format='ZARRTRAJ') as W:
             for ts in universe.trajectory:
                 W.write(sel.atoms)
@@ -278,6 +280,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def test_write_not_changing_ts(self, ref, universe, outgroup):
         copy_ts = universe.trajectory.ts.copy()
         with ref.writer(outgroup, n_atoms=5, n_frames=1,
+                        force_buffered=True,
                         format='ZARRTRAJ') as W:
             W.write(universe)
             assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
@@ -285,6 +288,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def test_write_trajectory_atomgroup(self, ref, reader, universe, outgroup):
         with ref.writer(outgroup, universe.atoms.n_atoms,
                         n_frames=universe.trajectory.n_frames,
+                        force_buffered=True,
                         format='ZARRTRAJ') as w:
             for ts in universe.trajectory:
                 w.write(universe.atoms)
@@ -293,6 +297,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def test_write_trajectory_universe(self, ref, reader, universe, outgroup):
         with ref.writer(outgroup, universe.atoms.n_atoms,
                         n_frames=universe.trajectory.n_frames,
+                        force_buffered=True,
                         format='ZARRTRAJ') as w:
             for ts in universe.trajectory:
                 w.write(universe)
@@ -313,6 +318,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                         n_frames=universe.trajectory.n_frames,
                         chunks=(1, universe.trajectory.n_atoms, 3),
                         max_memory=224,
+                        force_buffered=True,
                         format='ZARRTRAJ') as w:
             for ts in universe.trajectory[:5]:
                 w.write(universe)
