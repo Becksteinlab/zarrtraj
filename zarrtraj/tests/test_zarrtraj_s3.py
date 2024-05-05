@@ -197,7 +197,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
-        create_bucket("test-write-bucket, bucket")
+        create_bucket("test-write-bucket")
         yield
         self.server.stop()
 
