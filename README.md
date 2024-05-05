@@ -21,7 +21,8 @@ zarrtraj
 [url_license]: https://www.gnu.org/licenses/gpl-2.0
 [url_mda]: https://www.mdanalysis.org
 
-This is a kit that provides the ability to read and write trajectory data in the Zarr file format
+This is a kit that provides the ability to read and write trajectory data in the Zarr file format. For more information on the format and usage,
+see the [zarrtraj documentation](https://zarrtraj.readthedocs.io/en/latest/index.html)
 
 zarrtraj is bound by a [Code of Conduct](https://github.com/Becksteinlab/zarrtraj/blob/main/CODE_OF_CONDUCT.md).
 
