@@ -596,6 +596,7 @@ class ZarrTrajWriter(base.WriterBase):
                 self._check_max_memory()
                 self._initialize_zarr_datasets(ts)
                 self._initialize_memory_buffers()
+                # pylint: disable=method-hidden
                 self._write_next_timestep = self._write_next_cloud_timestep
             else:
                 self._initialize_zarr_datasets(ts)

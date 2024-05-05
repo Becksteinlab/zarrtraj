@@ -105,7 +105,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -n 2 -v --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
+          pytest -v --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
 
       - name: codecov
         if: github.repository == 'Becksteinlab/zarrtraj' && github.event_name !=
