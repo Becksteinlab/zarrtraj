@@ -388,36 +388,15 @@ class ZarrTrajReader(base.ReaderBase):
         """``True`` if 'position' group is in trajectory."""
         return "positions" in self._has
 
-    @has_positions.setter
-    def has_positions(self, value: bool):
-        if value:
-            self._has.add("positions")
-        else:
-            self._has.remove("positions")
-
     @property
     def has_velocities(self):
         """``True`` if 'velocity' group is in trajectory."""
         return "velocities" in self._has
 
-    @has_velocities.setter
-    def has_velocities(self, value: bool):
-        if value:
-            self._has.add("velocities")
-        else:
-            self._has.remove("velocities")
-
     @property
     def has_forces(self):
         """``True`` if 'force' group is in trajectory."""
         return "forces" in self._has
-
-    @has_forces.setter
-    def has_forces(self, value: bool):
-        if value:
-            self._has.add("forces")
-        else:
-            self._has.remove("forces")
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -966,23 +945,3 @@ class ZarrTrajWriter(base.WriterBase):
     def has_forces(self):
         """``True`` if writer is writing forces from Timestep."""
         return "forces" in self._has
-
-### Developer utils ###
-def get_frame_size(universe):
-    ts = universe.trajectory[0]
-    float32_size = np.dtype(np.float32).itemsize
-    int32_size = np.dtype(np.int32).itemsize
-    mem_per_frame = 0
-    # dimension
-    mem_per_frame += float32_size * 9
-    # frame
-    mem_per_frame += int32_size
-    # time
-    mem_per_frame += float32_size
-    if ts.has_positions:
-        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
-    if ts.has_forces:
-        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
-    if ts.has_velocities:
-        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
-    return mem_per_frame

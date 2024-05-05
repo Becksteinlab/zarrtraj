@@ -26,13 +26,13 @@ from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
                                               assert_array_almost_equal)
 from .conftest import ZARRTRAJReference
 import requests
-# Must ensure unique bucket name is created for GH actions
-import uuid
+import numpy as np
+
 
 
 # Only call this once a Moto Server is running
 def zarr_file_to_s3_bucket(fname):
-    bucket_name = f"testbucket-{uuid.uuid4()}"
+    bucket_name = "testbucket"
 
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
@@ -74,7 +74,7 @@ def zarr_file_to_s3_bucket(fname):
 
 # Only call this once a Moto Server is running
 def new_zarrgroup_in_bucket(fname):
-    bucket_name = f"testbucket-{uuid.uuid4()}"
+    bucket_name = f"testbucket"
 
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
@@ -323,6 +323,10 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 w.write(universe)
                 # Each frame of synthetic trajectory should be 224 bytes
             assert get_memory_usage(w) <= 224
+    def test_debug_cloud_resolution(self, ref, universe, outgroup):
+        assert isinstance(outgroup.store, zarr.storage.FSStore), f"outgroup.store is of type {type(outgroup.store)}"
+        assert 's3' in outgroup.store.fs.protocol, f"outgroup.store.fs.protocol is {outgroup.store.fs.protocol}"
+    
 
 
 # Helper Functions
@@ -331,3 +335,22 @@ def get_memory_usage(writer):
            writer._dimensions_buffer.nbytes + writer._pos_buffer.nbytes +
            writer._force_buffer.nbytes + writer._vel_buffer.nbytes)
     return mem
+
+def get_frame_size(universe):
+    ts = universe.trajectory[0]
+    float32_size = np.dtype(np.float32).itemsize
+    int32_size = np.dtype(np.int32).itemsize
+    mem_per_frame = 0
+    # dimension
+    mem_per_frame += float32_size * 9
+    # frame
+    mem_per_frame += int32_size
+    # time
+    mem_per_frame += float32_size
+    if ts.has_positions:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    if ts.has_forces:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    if ts.has_velocities:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    return mem_per_frame
