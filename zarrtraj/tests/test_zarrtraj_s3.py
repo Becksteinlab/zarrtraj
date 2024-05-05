@@ -302,9 +302,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 w.write(universe)
                 # Each frame of synthetic trajectory should be 224 bytes
             assert get_memory_usage(w) <= 224
-    def test_debug_cloud_resolution(self, ref, universe, outgroup):
-        assert isinstance(outgroup.store, zarr.storage.FSStore), f"outgroup.store is of type {type(outgroup.store)}"
-        assert 's3' in outgroup.store.fs.protocol, f"outgroup.store.fs.protocol is {outgroup.store.fs.protocol}"
     
 
 
