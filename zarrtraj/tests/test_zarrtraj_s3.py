@@ -220,7 +220,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
-        self.outgroup = new_zarrgroup_in_bucket("test-write.zarrtraj")
         yield
         self.server.stop()
 

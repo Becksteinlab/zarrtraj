@@ -3,33 +3,50 @@
 Example: Loading a .zarrtraj file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To load a ZarrTraj simulation from a .zarrtraj trajectory file, pass a topology file
-and a `zarr.Group` object to :class:`~MDAnalysis.core.universe.Universe`::
+To load a ZarrTraj simulation from a .zarrtraj trajectory file, pass a
+topology file and a `zarr.Group` object to
+:class:`~MDAnalysis.core.universe.Universe`::
 
     import zarrtraj
     import MDAnalysis as mda
-    u = mda.Universe("topology.tpr", zarr.open_group("trajectory.zarrtraj", mode="r"))
+    u = mda.Universe("topology.tpr", zarr.open_group("trajectory.zarrtraj",
+                                                     mode="r"))
 
 Example: Reading from cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Zarrtraj currently supports AWS, Google Cloud, and Azure Block Storage backed Zarr groups.
+Zarrtraj currently supports AWS, Google Cloud, and Azure Block Storage backed
+Zarr groups.
 
-To read from AWS S3, wrap your Zarr group in a Least-Recently-Used cache to reduce I/O::
+To read from AWS S3, wrap your Zarr group in a Least-Recently-Used cache to
+reduce I/O::
 
     import s3fs
     import zarrtraj
     import MDAnalysis as mda
-    key = os.getenv('AWS_KEY')
-    secret = os.getenv('AWS_SECRET_KEY')
-    s3 = s3fs.S3FileSystem(key=key, secret=secret)
-    store = s3fs.S3Map(root='<bucket-name>/trajectory.zarrtraj', s3=s3, check=False)
-    cache = LRUStoreCache(store, max_size=2**25) # max_size is cache size in bytes
+
+    # Profiles are setup in ./aws/credentials
+    s3 = s3fs.S3FileSystem(
+        anon=False,
+        profile='sample_profile',
+        client_kwargs=dict(
+            region_name='us-east-1''
+            )
+    )
+
+    cloud_store = s3fs.S3Map(
+        root='<bucket-name>/trajectory.zarrtraj',
+        s3=s3,
+        check=False
+    )
+
+    # max_size is cache size in bytes
+    cache = LRUStoreCache(cloud_store, max_size=2**25)
     root = zarr.group(store=cache)
     u = mda.Universe("topology.tpr", root)
 
-Because of this local cache model, random-access trajectory reading for cloud-backed Zarr Groups
-is not currently supported.
+Because of this local cache model, random-access trajectory reading for 
+cloud-backed Zarr Groups is not currently supported.
 
 Example: Writing to cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
