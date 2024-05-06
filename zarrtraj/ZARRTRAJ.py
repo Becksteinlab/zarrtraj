@@ -4,10 +4,11 @@ Example: Loading a .zarrtraj file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To load a ZarrTraj simulation from a .zarrtraj trajectory file, pass a
-topology file and a `zarr.Group` object to
+topology file and a `zarr.Group` object to a
 :class:`~MDAnalysis.core.universe.Universe`::
 
     import zarrtraj
+    import zarr
     import MDAnalysis as mda
     u = mda.Universe("topology.tpr", zarr.open_group("trajectory.zarrtraj",
                                                      mode="r"))
@@ -21,13 +22,17 @@ Zarr groups.
 To read from AWS S3, wrap your Zarr group in a Least-Recently-Used cache to
 reduce I/O::
 
-    import s3fs
     import zarrtraj
+    import s3fs
+    import zarr
     import MDAnalysis as mda
 
-    # Profiles are setup in ./aws/credentials
+    # S3FS exposes a filesystem-like interface to S3 buckets,
+    # which zarr uses to interact with the trajectory
     s3 = s3fs.S3FileSystem(
+        # Anon must be false to allow authentication
         anon=False,
+        # Authentication profiles are setup in ./aws/credentials
         profile='sample_profile',
         client_kwargs=dict(
             region_name='us-east-1''
@@ -45,17 +50,21 @@ reduce I/O::
     zgroup = zarr.group(store=cache)
     u = mda.Universe("topology.tpr", zgroup)
 
-Because of this local cache model, random-access trajectory reading for
-cloud-backed Zarr Groups is not currently supported.
+AWS provides a VSCode extension to manage AWS authentication profiles
+`here <https://aws.amazon.com/visualstudiocode/>`_.
+
+.. warning::
+
+    Because of this local cache model, random-access trajectory reading for
+    cloud-backed Zarr Groups is not currently supported.
 
 Example: Writing to cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-ZarrTrajWriter can write to AWS, Google Cloud, and Azure Block Storage as well. 
-The writer must be passed the `n_frames`, `format`, `chunks`, and `max_memory`
-kwargs in addition to other writer kwargs to function.
-
-To write to a `zarr.Group` from a trajectory loaded in MDAnalysis, do::
+ZarrTrajWriter can write to AWS, Google Cloud, and Azure Block Storage
+in addition to local storage. To write to a cloud-backed Zarr group, pass
+the `n_frames` and `format` kwargs in addition to other MDAnalysis
+writer arguments::
 
     import s3fs
     import zarrtraj
@@ -83,7 +92,7 @@ To write to a `zarr.Group` from a trajectory loaded in MDAnalysis, do::
             w.write(u.atoms)
 
 Classes
--------
+^^^^^^^
 
 .. autoclass:: ZarrTrajReader
    :members:
@@ -120,9 +129,11 @@ except ImportError:
 else:
     HAS_ZARR = True
 
-ZARRTRAJ_DEFAULT_BUFSIZE = 10485760 # 10 MB
-ZARRTRAJ_DEFAULT_FPC = 10 # 10 frames per chunk
-#: currently implemented version of the file format
+#: Default writing buffersize is 10 MB
+ZARRTRAJ_DEFAULT_BUFSIZE = 10485760
+#: Default frames per data chunk is 10
+ZARRTRAJ_DEFAULT_FPC = 10
+#: Currently implemented version of the file format
 ZARRTRAJ_VERSION = '0.1.0'
 
 
@@ -134,14 +145,13 @@ class ZarrTrajBoundaryConditions(Enum):
 class ZarrTrajReader(base.ReaderBase):
     """Reader for the `Zarrtraj` format version 0.1.0
 
-    For more information on the format, see the :ref:`zarrtraj-spec`
+    For more information on the format, see the :ref:`zarrtraj_spec`.
     """
 
     format = 'ZARRTRAJ'
 
     @store_init_arguments
     def __init__(self, filename,
-                 convert_units=True,
                  **kwargs):
         """
         Parameters
@@ -160,9 +170,12 @@ class ZarrTrajReader(base.ReaderBase):
         PermissionError
             when the Zarr group is not readable
         RuntimeError
-            when an incorrect unit is provided
+            when an incorrect unit is provided or a unit is missing
         ValueError
             when ``n_atoms`` changes values between timesteps
+        NoDataError
+            when the Zarrtraj file has a boundary condition of 'periodic'
+            but no 'dimensions' array is provided
         NoDataError
             when the Zarrtraj file has no 'position', 'velocity', or
             'force' group
@@ -182,7 +195,6 @@ class ZarrTrajReader(base.ReaderBase):
                                "is not compatible with reader version " +
                                f"{ZARRTRAJ_VERSION}")
 
-        self.convert_units = convert_units
         self._frame = -1
         self._file = self.filename
         self._particle_group = self._file['particles']
@@ -287,8 +299,7 @@ class ZarrTrajReader(base.ReaderBase):
         if self.has_forces:
             self._read_dataset_into_ts('forces', ts.forces)
 
-        if self.convert_units:
-            self._convert_units()
+        self._convert_units()
 
         return ts
 
@@ -377,36 +388,15 @@ class ZarrTrajReader(base.ReaderBase):
         """``True`` if 'position' group is in trajectory."""
         return "positions" in self._has
 
-    @has_positions.setter
-    def has_positions(self, value: bool):
-        if value:
-            self._has.add("positions")
-        else:
-            self._has.remove("positions")
-
     @property
     def has_velocities(self):
         """``True`` if 'velocity' group is in trajectory."""
         return "velocities" in self._has
 
-    @has_velocities.setter
-    def has_velocities(self, value: bool):
-        if value:
-            self._has.add("velocities")
-        else:
-            self._has.remove("velocities")
-
     @property
     def has_forces(self):
         """``True`` if 'force' group is in trajectory."""
         return "forces" in self._has
-
-    @has_forces.setter
-    def has_forces(self, value: bool):
-        if value:
-            self._has.add("forces")
-        else:
-            self._has.remove("forces")
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -420,13 +410,88 @@ class ZarrTrajReader(base.ReaderBase):
 
 
 class ZarrTrajWriter(base.WriterBase):
-    """Writer for `Zarrtraj` format version 0.1.0."""
+    """Writer for `Zarrtraj` format version 0.1.0.
+
+    All data from the input
+    :class:`~MDAnalysis.coordinates.timestep.Timestep` is
+    written by default.
+
+    Parameters
+    ----------
+    filename : :class:`zarr.Group`
+        Open, readable zarrtraj file
+    n_atoms : int
+        number of atoms in trajectory
+    n_frames : int (required for cloud and buffered writing)
+        number of frames to be written in trajectory
+    chunks : tuple (optional)
+        Custom chunk layout to be applied to the position,
+        velocity, and force datasets. By default, these datasets
+        are chunked in ``{10, n_atoms, 3}`` blocks
+    max_memory : int (optional)
+        Maximum memory buffer size in bytes for writing to a
+        a cloud-backed Zarr group or when `force_bufferd=True`.
+        By default, this is set to 10 MB.
+    compressor : str or int (optional)
+        `numcodecs` compressor object to be applied
+        to position, velocity, force, and observables datasets.
+    filters : list (optional)
+        list of `numcodecs` filter objects to be applied to
+        to position, velocity, force, and observables datasets.
+    positions : bool (optional)
+        Write positions into the trajectory [``True``]
+    velocities : bool (optional)
+        Write velocities into the trajectory [``True``]
+    forces : bool (optional)
+        Write forces into the trajectory [``True``]
+    author : str (optional)
+        Name of the author of the file
+    author_email : str (optional)
+        Email of the author of the file
+    creator : str (optional)
+        Software that wrote the file [``MDAnalysis``]
+    creator_version : str (optional)
+        Version of software that wrote the file
+        [:attr:`MDAnalysis.__version__`]
+
+    Raises
+    ------
+    RuntimeError
+        when `zarr` is not installed
+    PermissionError
+        when the Zarr group is not writeable
+    ImportError
+        when the correct package for handling a cloud-backed
+        Zar group is not installed
+    RuntimeError
+        when the Zarr group is cloud-backed or `force_buffer=True`
+        and `n_frames` is not provided
+    ValueError
+        when `n_atoms` is 0
+    ValueError
+        when `positions`, `velocities`, and `forces` are all
+        set to ``False``
+    TypeError
+        when the input object is not a :class:`Universe` or
+        :class:`AtomGroup`
+    IOError
+        when `n_atoms` of the :class:`Universe` or :class:`AtomGroup`
+        being written does not match `n_atoms` passed as an argument
+        to the writer
+    ValueError
+        when the trajectory is missing units
+    ValueError
+        when `max_memory` is not large enough to fit at least one
+        chunk of the trajectory data
+    ValueError
+        when the step or time dataset does not increase monotonically
+        """
 
     format = 'ZARRTRAJ'
     multiframe = True
 
     #: These variables are not written from :attr:`Timestep.data`
-    #: dictionary to the observables group in the H5MD file
+    #: dictionary to the observables group in the Zarrtraj file
     data_blacklist = ['step', 'time', 'dt']
 
     def __init__(self, filename, n_atoms, n_frames=None,
@@ -438,69 +503,6 @@ class ZarrTrajWriter(base.WriterBase):
                  author_email=None, author='N/A',
                  creator='MDAnalysis', creator_version=mda.__version__,
                  **kwargs):
-        """
-        All data from the input
-        :class:`~MDAnalysis.coordinates.timestep.Timestep` is
-        written by default. For detailed information on how
-        :class:`ZarrTrajWriter`handles units, compression, and chunking,
-        see the Notes section below.
-
-        Parameters
-        ----------
-        filename : :class:`zarr.Group`
-            Open, readable zarrtraj file
-        n_atoms : int
-            number of atoms in trajectory
-        n_frames : int (required for cloud and buffered writing)
-            number of frames to be written in trajectory
-        chunks : tuple (optional)
-            Custom chunk layout to be applied to the position,
-            velocity, and force datasets. By default, these datasets
-            are chunked in ``{10, n_atoms, 3}`` blocks
-        compressor : str or int (optional)
-            `numcodecs` compressor object to be applied
-            to position, velocity, force, and observables datasets.
-        filters : list (optional)
-            list of `numcodecs` filter objects to be applied to
-            to position, velocity, force, and observables datasets.
-        positions : bool (optional)
-            Write positions into the trajectory [``True``]
-        velocities : bool (optional)
-            Write velocities into the trajectory [``True``]
-        forces : bool (optional)
-            Write forces into the trajectory [``True``]
-        author : str (optional)
-            Name of the author of the file
-        author_email : str (optional)
-            Email of the author of the file
-        creator : str (optional)
-            Software that wrote the file [``MDAnalysis``]
-        creator_version : str (optional)
-            Version of software that wrote the file
-            [:attr:`MDAnalysis.__version__`]
-
-        Raises
-        ------
-        RuntimeError
-            when `zarr` is not installed
-        PermissionError
-            when the Zarr group is not writeable
-        ValueError
-            when `n_atoms` is 0
-        ValueError
-            when ``chunks=False`` but the user did not specify `n_frames`
-        ValueError
-            when `positions`, `velocities`, and `forces` are all
-            set to ``False``
-        TypeError
-            when the input object is not a :class:`Universe` or
-            :class:`AtomGroup`
-        IOError
-            when `n_atoms` of the :class:`Universe` or :class:`AtomGroup`
-            being written does not match `n_atoms` passed as an argument
-            to the writer
-
-        """
 
         if not HAS_ZARR:
             raise RuntimeError("ZarrTrajWriter: Please install zarr")
@@ -530,7 +532,7 @@ class ZarrTrajWriter(base.WriterBase):
         if self._is_buffered_store:
             # Ensure n_frames exists
             if n_frames is None:
-                raise TypeError("ZarrTrajWriter: Buffered writing requires " +
+                raise RuntimeError("ZarrTrajWriter: Buffered writing requires " +
                                 "'n_frames' kwarg")
             self.max_memory = (ZARRTRAJ_DEFAULT_BUFSIZE if max_memory is None
                                else max_memory)
@@ -634,7 +636,11 @@ class ZarrTrajWriter(base.WriterBase):
 
     def _determine_units(self, ag):
         """Verifies the trajectory contains all
-        necessary units so conversion to zarrtraj units can happen"""
+        necessary units so conversion to zarrtraj units can happen.
+        If the trajectory being written does not contain a unit but that
+        unit isn't being written, ZarrTrajWriter will still write the unit.
+        Eg. The trajectory doesn't contain force units but force isn't
+        being written"""
 
         from_units = ag.universe.trajectory.units.copy()
 
@@ -800,8 +806,9 @@ class ZarrTrajWriter(base.WriterBase):
         if self.has_forces:
             self._vel_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
                                          3), dtype=np.float32)
-        # Reduce cloud I/O by storing previous step val for error checking
+        # Reduce cloud I/O by storing previous step & time val for error checking
         self._prev_step = None
+        self._prev_time = None
 
     def _write_next_buffered_timestep(self, ts):
         """Write the next timestep to a cloud or buffered zarr group.
@@ -819,8 +826,12 @@ class ZarrTrajWriter(base.WriterBase):
                              "dataset must increase monotonically in value.")
         self._prev_step = curr_step
 
-        self._time_buffer[buffer_index] = (self.convert_time_to_native(
-            ts.time, inplace=False))
+        curr_time = (self.convert_time_to_native(ts.time, inplace=False))
+        self._time_buffer[buffer_index] = curr_time
+        if self._prev_time is not None and curr_time < self._prev_time:
+            raise ValueError("The Zarrtraj standard dictates that the time "
+                             "dataset must increase monotonically in value.")
+        self._prev_time = curr_time
 
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             self._dimensions_buffer[buffer_index, :] = (
@@ -899,7 +910,9 @@ class ZarrTrajWriter(base.WriterBase):
             raise ValueError("The Zarrtraj standard dictates that the step "
                              "dataset must increase monotonically in value.")
         self._time[i] = self.convert_time_to_native(ts.time, inplace=False)
-
+        if len(self._time) > 1 and self._time[i] < self._time[i-1]:
+            raise ValueError("The Zarrtraj standard dictates that the time "
+                             "dataset must increase monotonically in value.")
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             self._dimensions[i, :] = self.convert_pos_to_native(
                 ts.triclinic_dimensions, inplace=False)
@@ -932,23 +945,3 @@ class ZarrTrajWriter(base.WriterBase):
     def has_forces(self):
         """``True`` if writer is writing forces from Timestep."""
         return "forces" in self._has
-
-### Developer utils ###
-def get_frame_size(universe):
-    ts = universe.trajectory[0]
-    float32_size = np.dtype(np.float32).itemsize
-    int32_size = np.dtype(np.int32).itemsize
-    mem_per_frame = 0
-    # dimension
-    mem_per_frame += float32_size * 9
-    # frame
-    mem_per_frame += int32_size
-    # time
-    mem_per_frame += float32_size
-    if ts.has_positions:
-        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
-    if ts.has_forces:
-        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
-    if ts.has_velocities:
-        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
-    return mem_per_frame

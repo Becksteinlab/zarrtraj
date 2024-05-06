@@ -93,6 +93,8 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "default"
 
+# To include decorated objects like __init__
+autoclass_content = 'both'
 
 # -- Options for HTML output -------------------------------------------------
 

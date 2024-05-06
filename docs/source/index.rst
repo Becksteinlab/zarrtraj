@@ -12,13 +12,7 @@ Welcome to zarrtraj's documentation!
 
    getting_started
    api
-   zarrtraj-file-spec/v1
+   advanced_usage
+   zarrtraj-file-spec/v0.1.0
+   benchmarks
 
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

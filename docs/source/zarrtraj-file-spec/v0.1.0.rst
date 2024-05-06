@@ -12,7 +12,7 @@ Units
 Zarrtraj only supports the following units, meaning implementations must
 handle conversion:
 
-.. list-table
+.. list-table::
    :widths: 25 25 25
    :header-rows: 1
 
@@ -35,7 +35,9 @@ handle conversion:
 Zarrtraj implementations should fail out if any other units are encountered.
 All zarrtraj units must be present in file even if they are not used.
 
-Positions are in absolute units and are not relative to the box vectors.
+.. note::
+
+   Positions are in absolute units and are not relative to the box vectors.
 
 Structure
 ---------
@@ -49,6 +51,9 @@ Notation
 - ``<dtype>`` is the Zarr array datatype
 - ``+--`` is a required attribute of a group or Zarr array
 - ``---`` is an optional attribute of a group or Zarr array
+
+Layout
+^^^^^^
 
 .. code-block:: none
 
