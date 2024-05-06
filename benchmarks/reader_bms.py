@@ -5,7 +5,6 @@ from zarr.storage import DirectoryStore, LRUStoreCache
 import os
 
 BENCHMARK_DATA_DIR = os.getenv("BENCHMARK_DATA_DIR")
-print(BENCHMARK_DATA_DIR)
 
 class TrajReaderDiskBenchmarks(object):
     """Benchmarks for zarrtraj file striding."""
