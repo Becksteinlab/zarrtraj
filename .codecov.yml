@@ -14,3 +14,5 @@ comment:
   paths: null
 ignore:
   - "zarrtraj/_version.py"
+  - "zarrtraj/data"
+  - "benchmarks"

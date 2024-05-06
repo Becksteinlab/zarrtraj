@@ -216,6 +216,9 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         if ref.changing_dimensions:
             with ref.writer(outgroup, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
+                            # must use force_buffered here because
+                            # on GH actions runners, store type
+                            # resolves to KVStore rather than FSStore
                             force_buffered=True,
                             format='ZARRTRAJ') as W:
                 for ts in universe.trajectory:
