@@ -1,3 +1,4 @@
+"""Used to create synthetic test trajectory"""
 import zarrtraj
 from zarrtraj.tests.datafiles import ZARRTRAJ_xvf
 import zarr

@@ -26,14 +26,9 @@ from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
                                               assert_array_almost_equal)
 from .conftest import ZARRTRAJReference
 import requests
-# Must ensure unique bucket name is created for GH actions
-import uuid
+import numpy as np
 
-
-# Only call this once a Moto Server is running
-def zarr_file_to_s3_bucket(fname):
-    bucket_name = f"testbucket-{uuid.uuid4()}"
-
+def create_bucket(bucket_name):
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
@@ -50,6 +45,8 @@ def zarr_file_to_s3_bucket(fname):
                               CreateBucketConfiguration={'LocationConstraint':
                                                          'us-west-1'})
 
+# Only call this once a Moto Server is running
+def put_zarrtraj_in_bucket(fname, bucket_name):
     source = zarr.open_group(fname, mode='r')
 
     s3_fs = s3fs.S3FileSystem(
@@ -73,25 +70,7 @@ def zarr_file_to_s3_bucket(fname):
 
 
 # Only call this once a Moto Server is running
-def new_zarrgroup_in_bucket(fname):
-    bucket_name = f"testbucket-{uuid.uuid4()}"
-
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-
-    # Using boto3.resource rather than .client since we don't
-    # Need granular control
-    s3_resource = boto3.resource(
-        "s3",
-        region_name="us-west-1",
-        endpoint_url="http://localhost:5000"
-    )
-    s3_resource.create_bucket(Bucket=bucket_name,
-                              CreateBucketConfiguration={'LocationConstraint':
-                                                         'us-west-1'})
-
+def new_zarrgroup_in_bucket(fname, bucket_name):
     s3_fs = s3fs.S3FileSystem(
         anon=False,
         client_kwargs=dict(
@@ -104,9 +83,7 @@ def new_zarrgroup_in_bucket(fname):
         s3=s3_fs,
         check=False
     )
-
     cloud_dest = zarr.open_group(store=cloud_store, mode='a')
-
     return cloud_dest
 
 
@@ -116,7 +93,7 @@ class ZARRTRAJAWSReference(BaseReference):
     copied from test_xdr.TRRReference"""
     def __init__(self):
         super(ZARRTRAJAWSReference, self).__init__()
-        self.trajectory = zarr_file_to_s3_bucket(COORDINATES_ZARRTRAJ)
+        self.trajectory = put_zarrtraj_in_bucket(COORDINATES_ZARRTRAJ, "test-read-bucket")
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
         self.writer = zarrtraj.ZarrTrajWriter
@@ -154,6 +131,7 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
+        create_bucket("test-read-bucket")
         yield
         self.server.stop()
 
@@ -219,12 +197,13 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     def run_server(self):
         self.server = ThreadedMotoServer()
         self.server.start()
+        create_bucket("test-write-bucket")
         yield
         self.server.stop()
 
-    @pytest.fixture
+    @pytest.fixture()
     def outgroup(self):
-        r = new_zarrgroup_in_bucket("test-write.zarrtraj")
+        r = new_zarrgroup_in_bucket("test-write.zarrtraj", "test-write-bucket")
         yield r
         zarr.storage.rmdir(r.store)
 
@@ -237,6 +216,9 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         if ref.changing_dimensions:
             with ref.writer(outgroup, universe.atoms.n_atoms,
                             n_frames=universe.trajectory.n_frames,
+                            # must use force_buffered here because
+                            # on GH actions runners, store type
+                            # resolves to KVStore rather than FSStore
                             force_buffered=True,
                             format='ZARRTRAJ') as W:
                 for ts in universe.trajectory:
@@ -323,6 +305,7 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 w.write(universe)
                 # Each frame of synthetic trajectory should be 224 bytes
             assert get_memory_usage(w) <= 224
+    
 
 
 # Helper Functions
@@ -331,3 +314,22 @@ def get_memory_usage(writer):
            writer._dimensions_buffer.nbytes + writer._pos_buffer.nbytes +
            writer._force_buffer.nbytes + writer._vel_buffer.nbytes)
     return mem
+
+def get_frame_size(universe):
+    ts = universe.trajectory[0]
+    float32_size = np.dtype(np.float32).itemsize
+    int32_size = np.dtype(np.int32).itemsize
+    mem_per_frame = 0
+    # dimension
+    mem_per_frame += float32_size * 9
+    # frame
+    mem_per_frame += int32_size
+    # time
+    mem_per_frame += float32_size
+    if ts.has_positions:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    if ts.has_forces:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    if ts.has_velocities:
+        mem_per_frame += float32_size * universe.atoms.n_atoms * 3
+    return mem_per_frame

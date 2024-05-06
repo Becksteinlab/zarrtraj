@@ -72,7 +72,7 @@ target/
 .ipynb_checkpoints
 
 # Jupyter Notebook benchmark files
-notebooks/notebook_data_tmp
+notebooks/notebook_data_tmp/
 
 # pyenv
 .python-version
@@ -110,3 +110,7 @@ ENV/
 
 # poetry
 poetry.lock
+
+# benchmark stuff
+benchmarks/.asv
+benchmarks/testfiles/
