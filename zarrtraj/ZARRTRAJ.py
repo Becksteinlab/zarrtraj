@@ -181,6 +181,9 @@ class ZarrTrajReader(base.ReaderBase):
             'force' group
         RuntimeError
             when the Zarrtraj file version is incompatibile with the reader
+        ValueError
+            when an observables dataset is not sampled at the same rate as
+            the position, velocity, and force datasets
         """
         if not HAS_ZARR:
             raise RuntimeError("Please install zarr")
@@ -282,6 +285,14 @@ class ZarrTrajReader(base.ReaderBase):
         # Timestep should have a dt attribute (see Issue #2825)
         self.ts.time = self._time_array[self._frame]
         self.ts.data['step'] = self._step_array[self._frame]
+
+        # Handle observables
+        if 'observables' in particle_group:
+            try:
+                for key in particle_group['observables'].keys():
+                    self.ts.data[key] = self._particle_group['observables'][key][frame]
+            except IndexError:
+                raise ValueError("Observables data must be sampled at the same rate as the position, velocity, and force data.")
 
         # Sets frame box dimensions
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
@@ -796,9 +807,6 @@ class ZarrTrajWriter(base.WriterBase):
 
     def _create_observables_dataset(self, group, data):
         """helper function to initialize a dataset for each observable"""
-
-        self._obsv.require_group(group)
-        # guarantee ints and floats have a shape ()
         data = np.asarray(data)
         self._obsv[group] = zarr.empty(shape=(self._first_dim,) + data.shape,
                                        dtype=data.dtype)
@@ -946,9 +954,9 @@ class ZarrTrajWriter(base.WriterBase):
         if self.has_forces:
             self._force[i, :] = self.convert_forces_to_native(
                 ts.forces, inplace=False)
-        # NOTE: Fix me. add observables
-        # if self.convert_units:
-        #    self._convert_dataset_with_units(i)
+        if self.data_keys:
+            for key in self.data_keys:
+                self._obsv[key][i, :] = ts.data[key]
 
         self._counter += 1
 
