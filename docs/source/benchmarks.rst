@@ -1,6 +1,12 @@
 Benchmarks
 ==========
 
+Nightly benchmarks
+##################
+
+Speed benchmarks are available via AirSpeedVelocity
+`here <https://becksteinlab.github.io/zarrtraj/>`_
+
 Inital benchmarking
 ###################
 
@@ -11,6 +17,7 @@ NVIDIA GeForce 780 graphics card. Disk tests were performed on an NFS drive back
 File Writing Speed Test
 ^^^^^^^^^^^^^^^^^^^^^^^
 Test code::
+
     import zarrtraj
     import MDAnalysis as mda
     import MDAnalysisData
@@ -84,6 +91,7 @@ Principal Component Analysis Speed Test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Test code::
+
     import zarrtraj
     import MDAnalysis as mda
     import zarr
@@ -148,6 +156,7 @@ Test code::
 RMSF Speed Test
 ^^^^^^^^^^^^^^^
 Test code::
+
     import zarrtraj
     import MDAnalysis as mda
     import zarr
@@ -208,9 +217,3 @@ Test code::
         json.dump(rmsf_speeds, j)
 
 .. image:: _static/benchmark_figures/RMSF_speeds.svg
-
-Nightly benchmarks
-##################
-
-Speed benchmarks are available via AirSpeedVelocity
-`here <https://becksteinlab.github.io/zarrtraj/>`_
