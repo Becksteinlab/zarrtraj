@@ -633,9 +633,9 @@ class ZarrTrajWriter(base.WriterBase):
             self._determine_has(ts)
             self._determine_units(ag)
             if self._is_buffered_store:
-                self._check_max_memory()
+                self._check_max_memory(ts)
                 self._initialize_zarr_datasets(ts)
-                self._initialize_memory_buffers()
+                self._initialize_memory_buffers(ts)
             else:
                 self._initialize_zarr_datasets(ts)
             self._initial_write = False
@@ -665,8 +665,8 @@ class ZarrTrajWriter(base.WriterBase):
             raise ValueError("The trajectory is missing time units.")
 
     def _determine_has(self, ts):
-        # ask the parent file if it has positions, velocities, and forces,
-        # and dimensions
+        """ask the parent file if it has positions, velocities, and forces,
+        dimensions, and observables"""
         self._has = set()
         if "positions" in self._write and ts.has_positions:
             self._has.add("positions")
@@ -677,36 +677,39 @@ class ZarrTrajWriter(base.WriterBase):
         self._boundary = (ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC
                           if ts.dimensions is not None
                           else ZarrTrajBoundaryConditions.ZARRTRAJ_NONE)
+        # include observable datasets from ts.data dictionary that
+        # are NOT in self.data_blacklist
+        self.data_keys = [key for key in ts.data.keys() if key not in self.data_blacklist]
 
-    def _check_max_memory(self):
+    def _check_max_memory(self, ts):
         """
         Determines if at least one chunk of size ``chunks`` fits in the
         ``max_memory``sized buffer. If not, the writer will fail without
         allocating space for trajectory data on the cloud.
         """
-
-        float32_size = np.dtype(np.float32).itemsize
-        int32_size = np.dtype(np.int32).itemsize
+        # For each ts element in step, time, dimensions, positions, velocities, 
+        # forces, and observables, add ts[0].size * ts.itemsize * self.chunks[0]
+        # to mem_per_chunk
+        has = []
         mem_per_chunk = 0
-
-        # Write edges, step, and time in the same pattern as
-        # velocity, force, and position, though it is not
-        # strictly necessary for simplicity
+        try:
+            has.append(ts.data['step'])
+        except KeyError:
+            has.append(ts.frame)
+        has.append(ts.time)
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
-            mem_per_chunk += float32_size * self.chunks[0] * 9
-        # Step
-        mem_per_chunk += int32_size * self.chunks[0]
-        # Time
-        mem_per_chunk += float32_size * self.chunks[0]
-
+            has.append(ts.triclinic_dimensions)
         if self.has_positions:
-            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
-
-        if self.has_forces:
-            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
-
+            has.append(ts.positions)
         if self.has_velocities:
-            mem_per_chunk += float32_size * self.chunks[0] * self.n_atoms * 3
+            has.append(ts.velocities)
+        if self.has_forces:
+            has.append(ts.forces)
+        if self.data_keys:
+            for key in self.data_keys:
+                has.append(ts.data[key])
+        for dataset in has:
+            mem_per_chunk += dataset[0].size * dataset.itemsize * self.chunks[0]
 
         if mem_per_chunk > self.max_memory:
             raise ValueError("`max_memory` kwarg " +
@@ -773,20 +776,13 @@ class ZarrTrajWriter(base.WriterBase):
         if self.has_forces:
             self._create_trajectory_dataset('forces')
             self._force = self._particle_group['forces']
-
-        # intialize observable datasets from ts.data dictionary that
-        # are NOT in self.data_blacklist
-        self.data_keys = [
-            key for key in ts.data.keys() if key not in self.data_blacklist]
         if self.data_keys:
             self._obsv = self._particle_group.require_group('observables')
-        if self.data_keys:
             for key in self.data_keys:
                 self._create_observables_dataset(key, ts.data[key])
 
     def _create_observables_dataset(self, group, data):
         """helper function to initialize a dataset for each observable"""
-        data = np.asarray(data)
         self._obsv[group] = zarr.empty(shape=(self._first_dim,) + data.shape,
                                        dtype=data.dtype)
 
@@ -801,19 +797,25 @@ class ZarrTrajWriter(base.WriterBase):
                                                  compressor=self.compressor)
 
     def _initialize_memory_buffers(self):
-        self._time_buffer = np.zeros((self.n_buffer_frames,), dtype=np.float32)
-        self._step_buffer = np.zeros((self.n_buffer_frames,), dtype=np.int32)
-        self._dimensions_buffer = np.zeros((self.n_buffer_frames, 3, 3),
+        self._time_buffer = np.empty((self.n_buffer_frames,), dtype=np.float32)
+        self._step_buffer = np.empty((self.n_buffer_frames,), dtype=np.int32)
+        self._dimensions_buffer = np.empty((self.n_buffer_frames, 3, 3),
                                            dtype=np.float32)
         if self.has_positions:
-            self._pos_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
+            self._pos_buffer = np.empty((self.n_buffer_frames, self.n_atoms,
                                          3), dtype=np.float32)
         if self.has_velocities:
-            self._force_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
+            self._force_buffer = np.empty((self.n_buffer_frames, self.n_atoms,
                                            3), dtype=np.float32)
         if self.has_forces:
-            self._vel_buffer = np.zeros((self.n_buffer_frames, self.n_atoms,
+            self._vel_buffer = np.empty((self.n_buffer_frames, self.n_atoms,
                                          3), dtype=np.float32)
+        if self.data_keys:
+            self._obsv_buffer = {}
+            for key in self.data_keys:
+                self._obsv_buffer[key] = np.empty((self.n_buffer_frames,) +
+                                                 self._obsv[key].shape[1:],
+                                                 dtype=self._obsv[key].dtype)
         # Reduce cloud I/O by storing previous step & time val for error checking
         self._prev_step = None
         self._prev_time = None
@@ -842,21 +844,28 @@ class ZarrTrajWriter(base.WriterBase):
         self._prev_time = curr_time
 
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
-            self._dimensions_buffer[buffer_index, :] = (
+            self._dimensions_buffer[buffer_index] = (
                 self.convert_pos_to_native(ts.triclinic_dimensions,
                                            inplace=False))
 
         if self.has_positions:
-            self._pos_buffer[buffer_index, :] = self.convert_pos_to_native(
+            self._pos_buffer[buffer_index] = self.convert_pos_to_native(
                 ts.positions, inplace=False)
 
         if self.has_velocities:
-            self._vel_buffer[buffer_index, :] = (
+            self._vel_buffer[buffer_index] = (
                 self.convert_velocities_to_native(ts.velocities, inplace=False))
 
         if self.has_forces:
-            self._force_buffer[buffer_index, :] = (
+            self._force_buffer[buffer_index] = (
                 self.convert_forces_to_native(ts.forces, inplace=False))
+
+        if self.data_keys:
+            for key in self.data_keys:
+                try:
+                    self._obsv_buffer[key][buffer_index] = ts.data[key]
+                except IndexError:
+                    raise ValueError("Observables data must be sampled at the same rate as the position, velocity, and force data.")
 
         # If buffer is full or last write call, write buffers to cloud
         if (((i + 1) % self.n_buffer_frames == 0) or
@@ -871,7 +880,9 @@ class ZarrTrajWriter(base.WriterBase):
                 da.from_array(self._vel_buffer[:buffer_index + 1]).to_zarr(self._vel, region=(slice(i - buffer_index, i + 1),))
             if self.has_forces:
                 da.from_array(self._force_buffer[:buffer_index + 1]).to_zarr(self._force, region=(slice(i - buffer_index, i + 1),))
-
+            if self.data_keys:
+                for key in self.data_keys:
+                    da.from_array(self._obsv_buffer[key][:buffer_index + 1]).to_zarr(self._obsv[key], region=(slice(i - buffer_index, i + 1),))
         self._counter += 1
 
     def _write_next_timestep(self, ts):
@@ -935,7 +946,10 @@ class ZarrTrajWriter(base.WriterBase):
                 ts.forces, inplace=False)
         if self.data_keys:
             for key in self.data_keys:
-                self._obsv[key][i, :] = ts.data[key]
+                try:
+                    self._obsv[key][i, :] = ts.data[key]
+                except IndexError:
+                    raise ValueError("Observables data must be sampled at the same rate as the position, velocity, and force data.")
 
         self._counter += 1
 
