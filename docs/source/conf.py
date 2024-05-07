@@ -113,8 +113,8 @@ html_theme_options = {
 
 }
 # Set your logo and favicon here -- replace the placeholders!
-html_logo = "_static/logo/mda_logo.png"
-html_favicon = "_static/logo/mda_favicon.ico"
+#html_logo = "_static/logo/mda_logo.png"
+#html_favicon = "_static/logo/mda_favicon.ico"
 
 
 # Add any paths that contain custom static files (such as style sheets) here,
