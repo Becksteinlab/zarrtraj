@@ -152,21 +152,24 @@ class ZarrTrajReader(base.ReaderBase):
     format = "ZARRTRAJ"
 
     @store_init_arguments
-    def __init__(self, filename, **kwargs):
+    def __init__(self, filename, subselection=False, **kwargs):
         """
         Parameters
         ----------
         filename : :class:`zarr.Group`
-            Open, readable zarrtraj file
+            open, readable zarrtraj file
         convert_units : bool (optional)
             convert units to MDAnalysis units
+        subselection : bool (optional)
+            read only the subselection of atoms in the
+            "subselection" group at each frame
         **kwargs : dict
             General reader arguments.
 
         Raises
         ------
         RuntimeError
-            when `zarr` is not installed
+            when ``zarr`` is not installed
         PermissionError
             when the Zarr group is not readable
         RuntimeError
@@ -179,6 +182,9 @@ class ZarrTrajReader(base.ReaderBase):
         NoDataError
             when the Zarrtraj file has no 'position', 'velocity', or
             'force' group
+        NoDataError
+            when ``subselection`` is set to True but no 'subselection'
+            group is found in the Zarrtraj file
         RuntimeError
             when the Zarrtraj file version is incompatibile with the reader
         ValueError
@@ -223,6 +229,18 @@ class ZarrTrajReader(base.ReaderBase):
                 + "be provided if `boundary` is set to 'periodic'"
             )
 
+        if subselection:
+            if "subselection" in self._particle_group:
+                self.subselection = True
+                self._sub = self._particle_group["subselection"]
+            else:
+                raise NoDataError(
+                    "ZarrTrajReader: subselection is set to True but "
+                    + "no 'subselection' group is found in the Zarrtraj file."
+                )
+        else:
+            self.subselection = False
+
         # IO CALL
         self._has = set(
             name
@@ -235,7 +253,10 @@ class ZarrTrajReader(base.ReaderBase):
         # IO CALLS
         for name in self._has:
             dset = self._particle_group[name]
-            self.n_atoms = dset.shape[1]
+            if self.subselection:
+                self.n_atoms = self._sub.shape[1]
+            else:
+                self.n_atoms = dset.shape[1]
             self.compressor = dset.compressor
             # NOTE: add filters
             break
@@ -351,7 +372,12 @@ class ZarrTrajReader(base.ReaderBase):
         """Reads position, velocity, or force dataset array at current frame
         into corresponding ts attribute"""
 
-        n_atoms_now = self._particle_group[dataset][self._frame].shape[0]
+        if self.subselection:
+            sel = self._sub[self._frame]
+        else:
+            sel = slice(None)
+
+        n_atoms_now = self._particle_group[dataset][self._frame][sel].shape[0]
         if n_atoms_now != self.n_atoms:
             raise ValueError(
                 f"ZarrTrajReader: Frame {self._frame} of the {dataset} dataset"
@@ -362,7 +388,7 @@ class ZarrTrajReader(base.ReaderBase):
                 " with variable topology!"
             )
 
-        attribute[:] = self._particle_group[dataset][self._frame, :]
+        attribute[:] = self._particle_group[dataset][self._frame][sel]
 
     def _convert_units(self):
         """Converts position, velocity, and force values to
@@ -473,16 +499,16 @@ class ZarrTrajWriter(base.WriterBase):
     chunks : tuple (optional)
         Custom chunk layout to be applied to the position,
         velocity, and force datasets. By default, these datasets
-        are chunked in ``{10, n_atoms, 3}`` blocks
+        are chunked in ``(10, n_atoms, 3)`` blocks
     max_memory : int (optional)
         Maximum memory buffer size in bytes for writing to a
-        a cloud-backed Zarr group or when `force_bufferd=True`.
+        a cloud-backed Zarr group or when ``force_buffered=True``.
         By default, this is set to 10 MB.
     compressor : str or int (optional)
-        `numcodecs` compressor object to be applied
+        ``numcodecs`` compressor object to be applied
         to position, velocity, force, and observables datasets.
     filters : list (optional)
-        list of `numcodecs` filter objects to be applied to
+        list of ``numcodecs`` filter objects to be applied to
         to position, velocity, force, and observables datasets.
     positions : bool (optional)
         Write positions into the trajectory [``True``]

@@ -4,13 +4,20 @@ Unit and regression test for the zarrtraj package when the zarr group is on-disk
 
 import zarrtraj
 from zarrtraj import HAS_ZARR
+from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ, ZARRTRAJ_xvf
+from .conftest import ZARRTRAJReference
+from .utils import (
+    get_memory_usage,
+    get_frame_size,
+    get_n_closest_water_molecules,
+)
 
 if HAS_ZARR:
     import zarr
-from MDAnalysisTests.dummy import make_Universe
 import pytest
-from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ, ZARRTRAJ_xvf
+import numpy as np
 from numpy.testing import assert_equal, assert_almost_equal, assert_allclose
+
 import MDAnalysis as mda
 from MDAnalysisTests.datafiles import TPR_xvf, TRR_xvf, COORDINATES_TOPOLOGY
 from MDAnalysisTests.coordinates.base import (
@@ -20,10 +27,9 @@ from MDAnalysisTests.coordinates.base import (
     assert_timestep_almost_equal,
     assert_array_almost_equal,
 )
-import MDAnalysis as mda
+from MDAnalysisTests.dummy import make_Universe
+
 import sys
-from .conftest import ZARRTRAJReference
-from .utils import get_memory_usage, get_frame_size
 
 
 @pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
@@ -194,9 +200,40 @@ class TestZarrTrajReaderWithRealTrajectory(object):
         return mda.Universe(TPR_xvf, zarr.open_group(ZARRTRAJ_xvf, mode="a"))
 
     @pytest.fixture()
-    def outgroup(self, tmpdir):
-        file = str(tmpdir) + "zarrtraj-writer-test.zarrtraj"
+    def ingroup(self):
+        return zarr.open_group(ZARRTRAJ_xvf, mode="a")
+
+    def ingroup_with_subselection(self, tmpdir):
+        file = str(tmpdir) + "zarrtraj-reader-test.zarrtraj"
         return zarr.open_group(file, mode="a")
+
+    @pytest.fixture()
+    def outgroup(self, tmpdir):
+        file = str(tmpdir) + "zarrtraj-reader-test.zarrtraj"
+        return zarr.open_group(file, mode="a")
+
+    @pytest.fixture()
+    def Reader(self):
+        return zarrtraj.ZARRTRAJ.ZarrTrajReader
+
+    def test_read_subselection(self, Reader, universe, ingroup, tmpdir):
+        prot = universe.select_atoms("protein")
+        wat = universe.select_atoms("resname SOL")
+        # Subselection with shape (n_frames, n_closest)
+        subselection = get_n_closest_water_molecules(prot, wat, 5)
+
+        with tmpdir.as_cwd():
+            # Create a new zarr group and add the subselection
+            zSub = zarr.open_group("subselection.zarrtraj", mode="a")
+            zarr.convenience.copy_store(
+                ingroup.store, zSub.store, if_exists="replace"
+            )
+            zSub["particles"]["subselection"] = subselection
+            # Write new topology with only the subselected atoms
+            universe.atoms[subselection[0]].write("subselection.pdb")
+            # Create a new universe with the subselection
+            uSub = mda.Universe("subselection.pdb", zSub, subselection=True)
+            assert uSub.trajectory.n_atoms == 5
 
 
 @pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
