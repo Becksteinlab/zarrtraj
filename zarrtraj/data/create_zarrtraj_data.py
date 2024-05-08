@@ -1,6 +1,6 @@
 """Used to create synthetic test trajectory"""
 import zarrtraj
-from zarrtraj.tests.datafiles import ZARRTRAJ_xvf
+from zarrtraj.tests.datafiles import TEST_TOPOLOGY
 import zarr
 import MDAnalysis as mda
 import numpy as np
@@ -37,7 +37,7 @@ def create_test_trj(uni, fname):
 
 
 def main():
-    u = mda.Universe(ZARRTRAJ_xvf)
+    u = mda.Universe(TEST_TOPOLOGY)
 
     create_test_trj(u, 'test.zarrtraj')
 
