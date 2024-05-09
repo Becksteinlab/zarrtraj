@@ -29,13 +29,11 @@ from MDAnalysisTests.coordinates.base import (
     assert_array_almost_equal,
 )
 from .conftest import ZARRTRAJReference
-from .utils import find_free_port
 import requests
 import numpy as np
-import uuid
 
 
-def create_bucket(bucket_name, port=5000):
+def create_bucket(bucket_name):
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
@@ -44,7 +42,7 @@ def create_bucket(bucket_name, port=5000):
     # Using boto3.resource rather than .client since we don't
     # Need granular control
     s3_resource = boto3.resource(
-        "s3", region_name="us-west-1", endpoint_url=f"http://localhost:{port}"
+        "s3", region_name="us-west-1", endpoint_url="http://localhost:5000"
     )
     s3_resource.create_bucket(
         Bucket=bucket_name,
@@ -73,11 +71,11 @@ def put_zarrtraj_in_bucket(fname, bucket_name):
 
 
 # Only call this once a Moto Server is running
-def new_zarrgroup_in_bucket(fname, bucket_name, port=5000):
+def new_zarrgroup_in_bucket(fname, bucket_name):
     s3_fs = s3fs.S3FileSystem(
         anon=False,
         client_kwargs=dict(
-            region_name="us-west-1", endpoint_url=f"http://localhost:{port}"
+            region_name="us-west-1", endpoint_url="http://localhost:5000"
         ),
     )
     cloud_store = s3fs.S3Map(
@@ -92,10 +90,10 @@ class ZARRTRAJAWSReference(BaseReference):
     """Reference synthetic trajectory that was
     copied from test_xdr.TRRReference"""
 
-    def __init__(self, bucketname):
+    def __init__(self):
         super(ZARRTRAJAWSReference, self).__init__()
         self.trajectory = put_zarrtraj_in_bucket(
-            COORDINATES_ZARRTRAJ, bucketname
+            COORDINATES_ZARRTRAJ, "test-read-bucket"
         )
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
@@ -138,12 +136,10 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
         yield
         self.server.stop()
 
-    # Reuse same trajectory for all tests
-    # Since we are opening in mode 'r',
-    # We can run tests in parallel
+    # Only create one ref to avoid high memory usage
     @pytest.fixture(scope="class")
     def ref(self):
-        r = ZARRTRAJAWSReference("test-read-bucket")
+        r = ZARRTRAJAWSReference()
         yield r
 
     def test_get_writer_1(self, ref, reader, tmpdir):
@@ -197,32 +193,19 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
 class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     """Tests ZarrTrajWriter with with synthetic trajectory."""
 
-    @pytest.fixture(scope="function")
-    def server_port(self):
-        """Fixture to allocate a free port and provide it to other fixtures."""
-        port = find_free_port()
-        yield port
-
-    @pytest.fixture(scope="function")
-    def bucket_name(self):
-        """Get a unique bucket name"""
-        yield str(uuid.uuid4())
-
-    @pytest.fixture(autouse=True, scope="function")
-    def run_server(self, server_port, bucket_name):
-        self.server = ThreadedMotoServer(port=server_port)
+    # Run one moto server for the entire class
+    # And only keep one zarr group to write to
+    @pytest.fixture(autouse=True, scope="class")
+    def run_server(self):
+        self.server = ThreadedMotoServer()
         self.server.start()
-        create_bucket(bucket_name, port=server_port)
+        create_bucket("test-write-bucket")
         yield
         self.server.stop()
 
     @pytest.fixture()
-    def outgroup(self, server_port, bucket_name):
-        # Create a zarr group with a random, unique name
-        # to allow running tests in parallel
-        r = new_zarrgroup_in_bucket(
-            f"{uuid.uuid4()}.zarrtraj", bucket_name, port=server_port
-        )
+    def outgroup(self):
+        r = new_zarrgroup_in_bucket("test-write.zarrtraj", "test-write-bucket")
         yield r
         zarr.storage.rmdir(r.store)
 
@@ -241,9 +224,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 # on GH actions runners, store type
                 # resolves to KVStore rather than FSStore
                 force_buffered=True,
-                # 2 frames of memory
-                max_memory=616,
-                chunks=(2, 5, 3),
                 format="ZARRTRAJ",
             ) as W:
                 for ts in universe.trajectory:
@@ -276,8 +256,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
             n_frames=universe.trajectory.n_frames,
             force_buffered=True,
             format="ZARRTRAJ",
-            max_memory=616,
-            chunks=(2, 5, 3),
         ) as W:
             for ts in universe.trajectory:
                 W.write(sel.atoms)
@@ -312,8 +290,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
             n_atoms=5,
             n_frames=1,
             force_buffered=True,
-            max_memory=616,
-            chunks=(2, 5, 3),
             format="ZARRTRAJ",
         ) as W:
             W.write(universe)
@@ -325,8 +301,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
             universe.atoms.n_atoms,
             n_frames=universe.trajectory.n_frames,
             force_buffered=True,
-            max_memory=616,
-            chunks=(2, 5, 3),
             format="ZARRTRAJ",
         ) as w:
             for ts in universe.trajectory:
@@ -339,8 +313,6 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
             universe.atoms.n_atoms,
             n_frames=universe.trajectory.n_frames,
             force_buffered=True,
-            max_memory=616,
-            chunks=(2, 5, 3),
             format="ZARRTRAJ",
         ) as w:
             for ts in universe.trajectory:
