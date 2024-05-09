@@ -152,7 +152,7 @@ class ZarrTrajReader(base.ReaderBase):
     format = "ZARRTRAJ"
 
     @store_init_arguments
-    def __init__(self, filename, subselection=False, **kwargs):
+    def __init__(self, filename, **kwargs):
         """
         Parameters
         ----------
@@ -160,9 +160,6 @@ class ZarrTrajReader(base.ReaderBase):
             open, readable zarrtraj file
         convert_units : bool (optional)
             convert units to MDAnalysis units
-        subselection : bool (optional)
-            read only the subselection of atoms in the
-            "subselection" group at each frame
         **kwargs : dict
             General reader arguments.
 
@@ -182,9 +179,6 @@ class ZarrTrajReader(base.ReaderBase):
         NoDataError
             when the Zarrtraj file has no 'position', 'velocity', or
             'force' group
-        NoDataError
-            when ``subselection`` is set to True but no 'subselection'
-            group is found in the Zarrtraj file
         RuntimeError
             when the Zarrtraj file version is incompatibile with the reader
         ValueError
@@ -229,18 +223,6 @@ class ZarrTrajReader(base.ReaderBase):
                 + "be provided if `boundary` is set to 'periodic'"
             )
 
-        if subselection:
-            if "subselection" in self._particle_group:
-                self.subselection = True
-                self._sub = self._particle_group["subselection"]
-            else:
-                raise NoDataError(
-                    "ZarrTrajReader: subselection is set to True but "
-                    + "no 'subselection' group is found in the Zarrtraj file."
-                )
-        else:
-            self.subselection = False
-
         # IO CALL
         self._has = set(
             name
@@ -253,10 +235,7 @@ class ZarrTrajReader(base.ReaderBase):
         # IO CALLS
         for name in self._has:
             dset = self._particle_group[name]
-            if self.subselection:
-                self.n_atoms = self._sub.shape[1]
-            else:
-                self.n_atoms = dset.shape[1]
+            self.n_atoms = dset.shape[1]
             self.compressor = dset.compressor
             # NOTE: add filters
             break
@@ -372,12 +351,7 @@ class ZarrTrajReader(base.ReaderBase):
         """Reads position, velocity, or force dataset array at current frame
         into corresponding ts attribute"""
 
-        if self.subselection:
-            sel = self._sub[self._frame]
-        else:
-            sel = slice(None)
-
-        n_atoms_now = self._particle_group[dataset][self._frame][sel].shape[0]
+        n_atoms_now = self._particle_group[dataset][self._frame].shape[0]
         if n_atoms_now != self.n_atoms:
             raise ValueError(
                 f"ZarrTrajReader: Frame {self._frame} of the {dataset} dataset"
@@ -388,7 +362,7 @@ class ZarrTrajReader(base.ReaderBase):
                 " with variable topology!"
             )
 
-        attribute[:] = self._particle_group[dataset][self._frame][sel]
+        attribute[:] = self._particle_group[dataset][self._frame]
 
     def _convert_units(self):
         """Converts position, velocity, and force values to

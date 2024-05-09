@@ -216,25 +216,6 @@ class TestZarrTrajReaderWithRealTrajectory(object):
     def Reader(self):
         return zarrtraj.ZARRTRAJ.ZarrTrajReader
 
-    def test_read_subselection(self, Reader, universe, ingroup, tmpdir):
-        prot = universe.select_atoms("protein")
-        wat = universe.select_atoms("resname SOL")
-        # Subselection with shape (n_frames, n_closest)
-        subselection = get_n_closest_water_molecules(prot, wat, 5)
-
-        with tmpdir.as_cwd():
-            # Create a new zarr group and add the subselection
-            zSub = zarr.open_group("subselection.zarrtraj", mode="a")
-            zarr.convenience.copy_store(
-                ingroup.store, zSub.store, if_exists="replace"
-            )
-            zSub["particles"]["subselection"] = subselection
-            # Write new topology with only the subselected atoms
-            universe.atoms[subselection[0]].write("subselection.pdb")
-            # Create a new universe with the subselection
-            uSub = mda.Universe("subselection.pdb", zSub, subselection=True)
-            assert uSub.trajectory.n_atoms == 5
-
 
 @pytest.mark.skipif(not HAS_ZARR, reason="zarr not installed")
 class TestZarrTrajWriterWithRealTrajectory(object):

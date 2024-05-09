@@ -2,6 +2,7 @@
 
 import numpy as np
 from MDAnalysis.analysis import distances
+import socket
 
 
 # Helper Functions
@@ -67,3 +68,10 @@ def get_n_closest_water_molecules(prot_ag, wat_ag, n):
         i += 1
 
     return result
+
+
+def find_free_port():
+    """Find a free port on the host machine."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]

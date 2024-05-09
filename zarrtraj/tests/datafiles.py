@@ -16,7 +16,7 @@ __all__ = [
 from importlib import resources
 from pathlib import Path
 
-_data_ref = resources.files('zarrtraj.data')
+_data_ref = resources.files("zarrtraj.data")
 
 COORDINATES_ZARRTRAJ = (_data_ref / "test.zarrtraj").as_posix()
 ZARRTRAJ_xvf = (_data_ref / "cobrotoxin.zarrtraj").as_posix()

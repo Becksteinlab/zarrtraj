@@ -108,7 +108,7 @@ jobs:
         # moto buckets and groups interfering with
         # one another
         run: |
-          pytest -v --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
+          pytest -n auto -v --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
 
       - name: codecov
         if: github.repository == 'Becksteinlab/zarrtraj' && github.event_name !=
