@@ -16,11 +16,15 @@ import zarr
 
 print("importing zarrtraj...")
 
+
 def _format_hint(thing):
-    return (not isinstance(thing, np.ndarray) and
-            not isinstance(thing, zarr.Group) and
-            util.iterable(thing) and
-            not util.isstream(thing))
+    return (
+        not isinstance(thing, np.ndarray)
+        and not isinstance(thing, zarr.Group)
+        and util.iterable(thing)
+        and not util.isstream(thing)
+    )
+
 
 _READER_HINTS["CHAIN"] = _format_hint
 

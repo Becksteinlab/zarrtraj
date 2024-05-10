@@ -11,13 +11,17 @@ import pytest
 import zarrtraj
 from zarrtraj.tests.datafiles import COORDINATES_ZARRTRAJ
 from zarrtraj import HAS_ZARR
+
 if HAS_ZARR:
     import zarr
-from MDAnalysisTests.datafiles import (TPR_xvf, TRR_xvf,
-                                       COORDINATES_TOPOLOGY)
-from MDAnalysisTests.coordinates.base import (MultiframeReaderTest,
-                                              BaseReference, BaseWriterTest,
-                                              assert_timestep_almost_equal)
+from MDAnalysisTests.datafiles import TPR_xvf, TRR_xvf, COORDINATES_TOPOLOGY
+from MDAnalysisTests.coordinates.base import (
+    MultiframeReaderTest,
+    BaseReference,
+    BaseWriterTest,
+    assert_timestep_almost_equal,
+)
+
 
 @pytest.mark.skipif(not HAS_ZARR, reason="Zarr not installed")
 class ZARRTRAJReference(BaseReference):
@@ -26,11 +30,11 @@ class ZARRTRAJReference(BaseReference):
 
     def __init__(self):
         super(ZARRTRAJReference, self).__init__()
-        self.trajectory = zarr.open_group(COORDINATES_ZARRTRAJ, 'r')
+        self.trajectory = zarr.open_group(COORDINATES_ZARRTRAJ, "r")
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
         self.writer = zarrtraj.ZarrTrajWriter
-        self.ext = 'zarrtraj'
+        self.ext = "zarrtraj"
         self.prec = 3
         self.changing_dimensions = True
 

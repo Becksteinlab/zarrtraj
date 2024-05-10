@@ -16,22 +16,21 @@ The rules for this file:
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
 
-## [Unreleased]
+## [0.1.0]
 
 ### Authors
-<!-- GitHub usernames of contributors to this release -->
+- ljwoods2
 
 ### Added
-<!-- New added features -->
+- implemented v0.1.0 zarrtraj spec
 
 ### Fixed
-<!-- Bug fixes -->
+
 
 ### Changed
-<!-- Changes in existing functionality -->
+
 
 ### Deprecated
-<!-- Soon-to-be removed features -->
 
-### Removed
-<!-- Removed features -->
+
+
