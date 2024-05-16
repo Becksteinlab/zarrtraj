@@ -30,7 +30,6 @@ for c in compressor_lvl:
                 compressor=Blosc(cname="zstd", clevel=c),
                 filters=filters,
                 chunks=(ch, uShort.trajectory.n_atoms, 3),
-                format="ZARRTRAJ",
             ) as w:
                 for ts in uShort.trajectory:
                     w.write(uShort)
