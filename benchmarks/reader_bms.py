@@ -6,6 +6,9 @@ import os
 
 BENCHMARK_DATA_DIR = os.getenv("BENCHMARK_DATA_DIR")
 
+os.environ["S3_REGION_NAME"] = "us-west-1"
+os.environ['AWS_PROFILE'] = 'sample_profile'
+
 class TrajReaderDiskBenchmarks(object):
     """Benchmarks for zarrtraj file striding."""
     # parameterize the input zarr group
@@ -26,3 +29,27 @@ class TrajReaderDiskBenchmarks(object):
         """Benchmark striding over full trajectory"""
         for ts in self.reader_object:
             pass
+
+class TrajReaderAWSBenchmarks(object):
+    params = ([0, 1, 9], ["all", 3], [1, 10, 50], [40136, 401360, 2006800, 3933328])
+
+    # open an fsspec object
+    """
+    from fsspec docs:
+
+            cache_type: {"readahead", "none", "mmap", "bytes"}, default "readahead"
+            Caching policy in read mode. See the definitions in ``core``.
+        cache_options : dict
+            Additional options passed to the constructor for the cache specified
+            by `cache_type`.
+    """
+
+    """
+    goal: figure out how to pass in a cache type and cache size using the zarr storage_options dict.
+    then, run a benchmark on simple reading and RMSF
+
+    after this, we can being trying other methods of cacheing.
+    """
+    def setup(self):
+        storage_options = {"cache_type": "readahead"}
+        self.reader_object = ZarrTrajReader(self.traj_file, storage_options=storage_options)
