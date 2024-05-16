@@ -39,11 +39,17 @@ def create_bucket(bucket_name):
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
     os.environ["AWS_SESSION_TOKEN"] = "testing"
 
+    # For convenience, set dict options as env vars
+    # boto options
+    os.environ["AWS_DEFAULT_REGION"] = "us-west-1"
+    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:5000"
+    # s3fs options
+    os.environ["S3_REGION_NAME"] = "us-west-1"
+    os.environ["S3_ENDPOINT_URL"] = "http://localhost:5000"
+
     # Using boto3.resource rather than .client since we don't
     # Need granular control
-    s3_resource = boto3.resource(
-        "s3", region_name="us-west-1", endpoint_url="http://localhost:5000"
-    )
+    s3_resource = boto3.resource("s3")
     s3_resource.create_bucket(
         Bucket=bucket_name,
         CreateBucketConfiguration={"LocationConstraint": "us-west-1"},
@@ -56,9 +62,6 @@ def put_zarrtraj_in_bucket(fname, bucket_name):
 
     s3_fs = s3fs.S3FileSystem(
         anon=False,
-        client_kwargs=dict(
-            region_name="us-west-1", endpoint_url="http://localhost:5000"
-        ),
     )
     cloud_store = s3fs.S3Map(
         root=f"{bucket_name}/{os.path.basename(fname)}", s3=s3_fs, check=False
@@ -66,23 +69,7 @@ def put_zarrtraj_in_bucket(fname, bucket_name):
 
     zarr.convenience.copy_store(source.store, cloud_store, if_exists="replace")
 
-    cloud_dest = zarr.open_group(store=cloud_store, mode="r")
-    return cloud_dest
-
-
-# Only call this once a Moto Server is running
-def new_zarrgroup_in_bucket(fname, bucket_name):
-    s3_fs = s3fs.S3FileSystem(
-        anon=False,
-        client_kwargs=dict(
-            region_name="us-west-1", endpoint_url="http://localhost:5000"
-        ),
-    )
-    cloud_store = s3fs.S3Map(
-        root=f"{bucket_name}/{os.path.basename(fname)}", s3=s3_fs, check=False
-    )
-    cloud_dest = zarr.open_group(store=cloud_store, mode="a")
-    return cloud_dest
+    return "s3://" + bucket_name + "/" + os.path.basename(fname)
 
 
 @pytest.mark.skipif(not HAS_ZARR, reason="Zarr not installed")
@@ -128,11 +115,15 @@ class ZARRTRAJAWSReference(BaseReference):
 class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
 
+    @pytest.fixture(scope="class")
+    def bucketname(self):
+        return "test-read-bucket"
+
     @pytest.fixture(autouse=True, scope="class")
-    def run_server(self):
+    def run_server(self, bucketname):
         self.server = ThreadedMotoServer()
         self.server.start()
-        create_bucket("test-read-bucket")
+        create_bucket(bucketname)
         yield
         self.server.stop()
 
@@ -142,29 +133,47 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
         r = ZARRTRAJAWSReference()
         yield r
 
-    def test_get_writer_1(self, ref, reader, tmpdir):
+    @staticmethod
+    @pytest.fixture()
+    def reader(ref):
+        reader = ref.reader(ref.trajectory)
+        reader.add_auxiliary(
+            "lowf",
+            ref.aux_lowf,
+            dt=ref.aux_lowf_dt,
+            initial_time=0,
+            time_selector=None,
+        )
+        reader.add_auxiliary(
+            "highf",
+            ref.aux_highf,
+            dt=ref.aux_highf_dt,
+            initial_time=0,
+            time_selector=None,
+        )
+        yield reader
+
+    def test_get_writer_1(self, ref, reader, tmpdir, bucketname):
         with tmpdir.as_cwd():
-            outfile = zarr.open_group("test-writer" + ref.ext, "a")
-            with reader.Writer(outfile) as W:
+            outfn = "s3://" + bucketname + "/test-writer.zarrtraj"
+            with reader.Writer(outfn) as W:
                 assert_equal(isinstance(W, ref.writer), True)
                 assert_equal(W.n_atoms, reader.n_atoms)
 
-    def test_get_writer_2(self, ref, reader, tmpdir):
+    def test_get_writer_2(self, ref, reader, tmpdir, bucketname):
         with tmpdir.as_cwd():
-            outfile = zarr.open_group("test-writer" + ref.ext, "a")
-            with reader.Writer(outfile, n_atoms=100) as W:
+            outfn = "s3://" + bucketname + "/test-writer.zarrtraj"
+            with reader.Writer(outfn, n_atoms=100) as W:
                 assert_equal(isinstance(W, ref.writer), True)
                 assert_equal(W.n_atoms, 100)
 
-    def test_copying(self, ref, reader):
+    def test_copying(self, ref):
         original = zarrtraj.ZarrTrajReader(
-            ref.trajectory, convert_units=False, dt=2, time_offset=10, foo="bar"
+            ref.trajectory, dt=2, time_offset=10, foo="bar"
         )
         copy = original.copy()
 
         assert original.format not in ("MEMORY", "CHAIN")
-        assert original.convert_units is False
-        assert copy.convert_units is False
         assert original._ts_kwargs["time_offset"] == 10
         assert copy._ts_kwargs["time_offset"] == 10
         assert original._ts_kwargs["dt"] == 2
@@ -193,43 +202,46 @@ class TestZarrTrajAWSReaderBaseAPI(MultiframeReaderTest):
 class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
     """Tests ZarrTrajWriter with with synthetic trajectory."""
 
+    @pytest.fixture(scope="class")
+    def bucketname(self):
+        return "test-write-bucket"
+
     # Run one moto server for the entire class
     # And only keep one zarr group to write to
     @pytest.fixture(autouse=True, scope="class")
-    def run_server(self):
+    def run_server(self, bucketname):
         self.server = ThreadedMotoServer()
         self.server.start()
-        create_bucket("test-write-bucket")
+        create_bucket(bucketname)
         yield
         self.server.stop()
 
     @pytest.fixture()
-    def outgroup(self):
-        r = new_zarrgroup_in_bucket("test-write.zarrtraj", "test-write-bucket")
+    def outfn(self, bucketname):
+        r = "s3://" + bucketname + "/test-write.zarrtraj"
         yield r
-        zarr.storage.rmdir(r.store)
+        zarr.storage.rmdir(r)
 
     @staticmethod
     @pytest.fixture()
     def ref():
         yield ZARRTRAJReference()
 
-    def test_write_different_box(self, ref, universe, outgroup):
+    def test_write_different_box(self, ref, universe, outfn):
         if ref.changing_dimensions:
             with ref.writer(
-                outgroup,
+                outfn,
                 universe.atoms.n_atoms,
                 n_frames=universe.trajectory.n_frames,
                 # must use force_buffered here because
                 # on GH actions runners, store type
                 # resolves to KVStore rather than FSStore
                 force_buffered=True,
-                format="ZARRTRAJ",
             ) as W:
                 for ts in universe.trajectory:
                     universe.dimensions[:3] += 1
                     W.write(universe)
-            written = ref.reader(outgroup)
+            written = ref.reader(outfn)
 
             for ts_ref, ts_w in zip(universe.trajectory, written):
                 universe.dimensions[:3] += 1
@@ -245,21 +257,20 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
         u_no_resnames,
         u_no_resids,
         u_no_names,
-        outgroup,
+        outfn,
     ):
         sel_str = "resid 1"
         sel = universe.select_atoms(sel_str)
 
         with ref.writer(
-            outgroup,
+            outfn,
             sel.n_atoms,
             n_frames=universe.trajectory.n_frames,
             force_buffered=True,
-            format="ZARRTRAJ",
         ) as W:
             for ts in universe.trajectory:
                 W.write(sel.atoms)
-        copy = ref.reader(outgroup)
+        copy = ref.reader(outfn)
         for orig_ts, copy_ts in zip(universe.trajectory, copy):
             assert_array_almost_equal(
                 copy_ts._pos,
@@ -271,50 +282,46 @@ class TestZarrTrajAWSWriterBaseAPI(BaseWriterTest):
                 ),
             )
 
-    def test_write_none(self, ref, outgroup):
+    def test_write_none(self, ref, outfn):
         with pytest.raises(TypeError):
             with ref.writer(
-                outgroup,
+                outfn,
                 42,
                 n_frames=1,
                 max_memory=1,
                 chunks=(1, 5, 3),
-                format="ZARRTRAJ",
             ) as w:
                 w.write(None)
 
-    def test_write_not_changing_ts(self, ref, universe, outgroup):
+    def test_write_not_changing_ts(self, ref, universe, outfn):
         copy_ts = universe.trajectory.ts.copy()
         with ref.writer(
-            outgroup,
+            outfn,
             n_atoms=5,
             n_frames=1,
             force_buffered=True,
-            format="ZARRTRAJ",
         ) as W:
             W.write(universe)
             assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
 
-    def test_write_trajectory_atomgroup(self, ref, reader, universe, outgroup):
+    def test_write_trajectory_atomgroup(self, ref, reader, universe, outfn):
         with ref.writer(
-            outgroup,
+            outfn,
             universe.atoms.n_atoms,
             n_frames=universe.trajectory.n_frames,
             force_buffered=True,
-            format="ZARRTRAJ",
         ) as w:
             for ts in universe.trajectory:
                 w.write(universe.atoms)
-        self._check_copy(outgroup, ref, reader)
+        self._check_copy(outfn, ref, reader)
 
-    def test_write_trajectory_universe(self, ref, reader, universe, outgroup):
+    def test_write_trajectory_universe(self, ref, reader, universe, outfn):
         with ref.writer(
-            outgroup,
+            outfn,
             universe.atoms.n_atoms,
             n_frames=universe.trajectory.n_frames,
             force_buffered=True,
-            format="ZARRTRAJ",
         ) as w:
             for ts in universe.trajectory:
                 w.write(universe)
-        self._check_copy(outgroup, ref, reader)
+        self._check_copy(outfn, ref, reader)

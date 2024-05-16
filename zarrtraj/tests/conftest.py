@@ -30,7 +30,7 @@ class ZARRTRAJReference(BaseReference):
 
     def __init__(self):
         super(ZARRTRAJReference, self).__init__()
-        self.trajectory = zarr.open_group(COORDINATES_ZARRTRAJ, "r")
+        self.trajectory = COORDINATES_ZARRTRAJ
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZarrTrajReader
         self.writer = zarrtraj.ZarrTrajWriter
