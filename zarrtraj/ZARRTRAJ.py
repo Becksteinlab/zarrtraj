@@ -193,6 +193,9 @@ class ZarrTrajReader(base.ReaderBase):
         self.storage_options = storage_options
         self._file = None
         self.cache_size = cache_size
+        # Before opening the zarr group, check filename's protocol
+        # to see if we need to import the correct filesystem
+        self._protocol_import()
         self._open_group()
         if not self._file:
             raise PermissionError(
@@ -267,6 +270,30 @@ class ZarrTrajReader(base.ReaderBase):
         }
         self._read_next_timestep()
 
+    def _protocol_import(self):
+        """Import the correct filesystem for the protocol"""
+        if "s3://" in self.filename:
+            try:
+                import s3fs
+            except ImportError:
+                raise ImportError(
+                    "ZarrTrajReader: Reading from AWS S3 requires installing s3fs"
+                )
+        elif "gcs://" in self.filename or "gs://" in self.filename:
+            try:
+                import gcsfs
+            except ImportError:
+                raise ImportError(
+                    "ZarrTrajReader: Reading from Google Cloud requires installing gcsfs"
+                )
+        elif "az://" in self.filename:
+            try:
+                import adlfs
+            except ImportError:
+                raise ImportError(
+                    "ZarrTrajReader: Reading from  Azure Blog Storage requires installing adlfs"
+                )
+
     def _open_group(self):
         """Open the Zarr group for reading"""
         self._frame = -1
@@ -276,6 +303,7 @@ class ZarrTrajReader(base.ReaderBase):
         store = zarr.storage.FSStore(
             url=self.filename, mode="r", **storage_options
         )
+
         cache_wrapper = zarr.storage.LRUStoreCache(
             store, max_size=self.cache_size
         )
