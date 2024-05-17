@@ -11,7 +11,5 @@ from MDAnalysis.lib import util
 import numpy as np
 import zarr
 
-print("importing zarrtraj...")
-
 
 __version__ = version("zarrtraj")

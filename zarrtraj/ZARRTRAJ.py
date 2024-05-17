@@ -270,8 +270,11 @@ class ZarrTrajReader(base.ReaderBase):
     def _open_group(self):
         """Open the Zarr group for reading"""
         self._frame = -1
+        storage_options = (
+            dict() if self.storage_options is None else self.storage_options
+        )
         store = zarr.storage.FSStore(
-            url=self.filename, mode="r", **self.storage_options
+            url=self.filename, mode="r", **storage_options
         )
         cache_wrapper = zarr.storage.LRUStoreCache(
             store, max_size=self.cache_size
