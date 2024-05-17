@@ -152,7 +152,9 @@ class ZarrTrajReader(base.ReaderBase):
     format = ["ZARRTRAJ", "ZARR"]
 
     @store_init_arguments
-    def __init__(self, filename, storage_options=None, **kwargs):
+    def __init__(
+        self, filename, storage_options=None, cache_size=2**28, **kwargs
+    ):
         """
         Parameters
         ----------
@@ -189,6 +191,8 @@ class ZarrTrajReader(base.ReaderBase):
             raise RuntimeError("ZarrTrajReader: Please install zarr")
         super(ZarrTrajReader, self).__init__(filename, **kwargs)
         self.storage_options = storage_options
+        self._file = None
+        self.cache_size = cache_size
         self._open_group()
         if not self._file:
             raise PermissionError(
@@ -266,9 +270,13 @@ class ZarrTrajReader(base.ReaderBase):
     def _open_group(self):
         """Open the Zarr group for reading"""
         self._frame = -1
-        self._file = zarr.open_group(
-            self.filename, storage_options=self.storage_options, mode="r"
+        store = zarr.storage.FSStore(
+            url=self.filename, mode="r", **self.storage_options
         )
+        cache_wrapper = zarr.storage.LRUStoreCache(
+            store, max_size=self.cache_size
+        )
+        self._file = zarr.open_group(store=cache_wrapper, mode="r")
 
     def _verify_correct_units(self):
         self._unit_group = self._particle_group["units"]
@@ -404,7 +412,8 @@ class ZarrTrajReader(base.ReaderBase):
 
     def close(self):
         """Close reader"""
-        self._file.store.close()
+        if self._file is not None:
+            self._file.store.close()
 
     def _reopen(self):
         """reopen trajectory"""
