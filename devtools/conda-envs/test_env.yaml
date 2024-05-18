@@ -31,8 +31,6 @@ dependencies:
   ### Notebooks ###
   - jupyter
 
-  ### Benchmarking ###
-  - asv
 
   # Pip-only installs
   # - pip:

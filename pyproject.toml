@@ -22,7 +22,7 @@ dependencies = [
     # Earliest zarr version where BaseStore has close() method
     "zarr>=2.11.0", 
     "dask>=2023.11.0",
-    "s3fs==2024.3.0",
+    
 ]
 keywords = [
     "molecular simulations",
@@ -37,6 +37,7 @@ test = [
     "pytest-xdist>=3.5.0",
     "pytest-cov>=4.1.0",
     "MDAnalysisTests>=2.7.0",
+    "s3fs==2024.3.0",
 ]
 doc = [
     "sphinx",

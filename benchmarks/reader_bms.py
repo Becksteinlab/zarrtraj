@@ -47,6 +47,7 @@ class TrajReaderDiskBenchmarks(object):
 
 
 class TrajReaderAWSBenchmarks(object):
+    timeout = 86400
     params = (
         [0, 1, 9],
         ["all", 3],
