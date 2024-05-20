@@ -32,7 +32,7 @@ for c in compressor_lvl:
                 filters = [Quantize(digits=3, dtype="f4")]
             else:
                 filters = None
-            z = f"s3://zarrtraj-test-data/short_{c}_{f}_{ch}.zarrtraj"
+            z = f"s3://zarrtraj-test-data/long_{c}_{f}_{ch}.zarrtraj"
 
             with mda.Writer(
                 z,
