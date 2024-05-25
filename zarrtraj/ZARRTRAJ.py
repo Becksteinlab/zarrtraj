@@ -111,7 +111,8 @@ from MDAnalysis.due import due, Doi
 from MDAnalysis.lib.util import store_init_arguments
 import dask.array as da
 from enum import Enum
-
+from .CACHE import FrameCache, AsyncFrameCache
+import collections
 
 try:
     import zarr
@@ -268,6 +269,9 @@ class ZarrTrajReader(base.ReaderBase):
             "velocity": "nm/ps",
             "force": "kJ/(mol*nm)",
         }
+
+        self._frame_seq = None
+
         self._read_next_timestep()
 
     def _protocol_import(self):
@@ -494,6 +498,57 @@ class ZarrTrajReader(base.ReaderBase):
         self.__dict__ = state
         self._particle_group = self._file["particles"]
         self[self.ts.frame]
+
+    def __getitem__(self, frame):
+        """Return the Timestep corresponding to *frame*.
+
+        If `frame` is a integer then the corresponding frame is
+        returned. Negative numbers are counted from the end.
+
+        If frame is a :class:`slice` then an iterator is returned that
+        allows iteration over that part of the trajectory.
+
+        Note
+        ----
+        *frame* is a 0-based frame index.
+
+        Note
+        ----
+        ZarrtrajReader overrides this to get
+        access to the the sequence of frames
+        the user wants. If self._frame_seq is None
+        by the time the first read is called, we assume
+        the full full trajectory is being accessed 
+        in a for loop
+        """
+        if isinstance(frame, numbers.Integral):
+            frame = self._apply_limits(frame)
+            self._frame_seq = collections.deque([frame])
+            return self._read_frame_with_aux(frame)
+        elif isinstance(frame, (list, np.ndarray)):
+            if len(frame) != 0 and isinstance(frame[0], (bool, np.bool_)):
+                # Avoid having list of bools
+                frame = np.asarray(frame, dtype=bool)
+                # Convert bool array to int array
+                frame = np.arange(len(self))[frame]
+            if isinstance(frame, np.ndarray):
+                frame = frame.tolist()
+            self._frame_seq = collections.deque(frame)
+            return base.FrameIteratorIndices(self, frame)
+        elif isinstance(frame, slice):
+            start, stop, step = self.check_slice_indices(
+                frame.start, frame.stop, frame.step
+            )
+            self._frame_seq = collections.deque(range(start, stop, step))
+            if start == 0 and stop == len(self) and step == 1:
+                return base.FrameIteratorAll(self)
+            else:
+                return base.FrameIteratorSliced(self, frame)
+        else:
+            raise TypeError(
+                "Trajectories must be an indexed using an integer,"
+                " slice or list of indices"
+            )
 
 
 class ZarrTrajWriter(base.WriterBase):
@@ -1157,3 +1212,9 @@ class ZarrTrajWriter(base.WriterBase):
     def has_forces(self):
         """``True`` if writer is writing forces from Timestep."""
         return "forces" in self._has
+
+
+class ZarrtrajFrameCache(FrameCache):
+
+    def cleanup(self):
+        pass
