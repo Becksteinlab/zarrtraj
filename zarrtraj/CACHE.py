@@ -10,12 +10,15 @@ class FrameCache(abc.ABCMeta):
         cache_size,
         timestep,
         frames_per_chunk,
-        parallel=False,
+        dimensions,
+        positions,
+        velocities,
+        forces,
+        obsvervables,
     ):
         self._cache_size = cache_size
         self._timestep = timestep
         self._frames_per_chunk = frames_per_chunk
-        self._parallel = parallel
 
     def update_frame_seq(self, frame_seq):
         """Call this in the reader's _read_next_timestep
@@ -25,9 +28,17 @@ class FrameCache(abc.ABCMeta):
         self._reader_q = frame_seq.copy()
 
     @abc.abstractmethod
-    def getFrame(self, frame):
+    def getFrame(self):
         """Call this in the reader's
         _read_next_frame() method
+        """
+        pass
+
+    @abc.abstractmethod
+    def _load_first_timestep(self):
+        """Call this in the cache's init method
+        to ensure the reader's 'reading head'
+        is initialized to the first timestep
         """
         pass
 
@@ -41,24 +52,24 @@ class AsyncFrameCache(FrameCache, threading.thread):
 
     def __init__(self):
         super(FrameCache, self).__init__()
-        self._unread_frames = deque([])
         self._frame_seq = deque([])
         self._stop_event = threading.Event()
         self._first_read = True
         self._mutex = threading.Lock()
         self._frame_available = threading.Condition(self._mutex)
-        # load the first time step
 
-    def getFrame(self, frame):
+        self._load_first_timestep()
+
+    def getFrame(self):
         if self._first_read:
             self._first_read = False
             self.start()
+        frame = self._reader_q.popleft()
         with self._frame_available:
             while not self._cache_contains(frame):
                 self._frame_available.wait()
 
             self._load_timestep(frame)
-            self._reader_q.pop(0)
 
     def run(self):
         while self._frame_seq and not self._stop_event:
@@ -93,8 +104,6 @@ class AsyncFrameCache(FrameCache, threading.thread):
 
         returns the key of the chunk to be replaced
         chunks have keys based on frame number % chunksize
-
-
         """
         res = -1
         farthest = index
@@ -118,4 +127,23 @@ class AsyncFrameCache(FrameCache, threading.thread):
 
     @abc.abstractmethod
     def _cache_contains(self, frame):
+        pass
+
+    @abc.abstractmethod
+    def _get_key(self, key):
+        """Loads the chunk with the given key
+        from the file into the cache"""
+        pass
+
+    @abc.abstractmethod
+    def _evict(self, key):
+        """Removes the chunk with the given key from
+        the cache"""
+        pass
+
+    @abc.abstractmethod
+    def _load_timestep(self, frame):
+        """Loads the frame with the given frame number
+        into the timestep object associated with the cache class
+        """
         pass

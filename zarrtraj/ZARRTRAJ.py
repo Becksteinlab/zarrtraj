@@ -113,6 +113,8 @@ import dask.array as da
 from enum import Enum
 from .CACHE import FrameCache, AsyncFrameCache
 import collections
+import numbers
+import logging
 
 try:
     import zarr
@@ -130,6 +132,8 @@ except ImportError:
 
 else:
     HAS_ZARR = True
+
+logger = logging.getLogger(__name__)
 
 #: Default writing buffersize is 10 MB
 ZARRTRAJ_DEFAULT_BUFSIZE = 10485760
@@ -188,12 +192,19 @@ class ZarrTrajReader(base.ReaderBase):
             when an observables dataset is not sampled at the same rate as
             the position, velocity, and force datasets
         """
+        # The reader is responsible for
+        # 1. Verifying the file (version, units, array shapes and sizes, etc)
+        # 2. Opening and closing the file
+
+        # Ensure close() doesn't fail if the cache wasn't allocated
+        self._cache = None
+
+        # NOTE: this class likely needs a timestep still. check this
         if not HAS_ZARR:
             raise RuntimeError("ZarrTrajReader: Please install zarr")
         super(ZarrTrajReader, self).__init__(filename, **kwargs)
         self.storage_options = storage_options
         self._file = None
-        self.cache_size = cache_size
         # Before opening the zarr group, check filename's protocol
         # to see if we need to import the correct filesystem
         self._protocol_import()
@@ -228,7 +239,7 @@ class ZarrTrajReader(base.ReaderBase):
                 + "be provided if `boundary` is set to 'periodic'"
             )
 
-        # IO CALL
+        # Keep this so other objects can call has_positions, etc
         self._has = set(
             name
             for name in self._particle_group
@@ -236,8 +247,7 @@ class ZarrTrajReader(base.ReaderBase):
         )
 
         # Get n_atoms + numcodecs compressor & filter objects from
-        # first available dataset
-        # IO CALLS
+        # first available dataset so we can pass this in reader.Writer
         for name in self._has:
             dset = self._particle_group[name]
             self.n_atoms = dset.shape[1]
@@ -250,17 +260,10 @@ class ZarrTrajReader(base.ReaderBase):
                 + "or force array in the ZarrTraj file."
             )
 
+        # Keep this so other objects can call reader.n_frames
         for name in self._has:
             self._n_frames = self._particle_group[name].shape[0]
             break
-
-        self.ts = self._Timestep(
-            self.n_atoms,
-            positions=self.has_positions,
-            velocities=self.has_velocities,
-            forces=self.has_forces,
-            **self._ts_kwargs,
-        )
 
         self._verify_correct_units()
         self.units = {
@@ -271,8 +274,12 @@ class ZarrTrajReader(base.ReaderBase):
         }
 
         self._frame_seq = None
-
-        self._read_next_timestep()
+        self._cache = ZarrTrajAsyncFrameCache(
+            self._file,
+            self._has,
+            self._obsv,
+        )
+        self._first_read = False
 
     def _protocol_import(self):
         """Import the correct filesystem for the protocol"""
@@ -300,18 +307,13 @@ class ZarrTrajReader(base.ReaderBase):
 
     def _open_group(self):
         """Open the Zarr group for reading"""
-        self._frame = -1
         storage_options = (
             dict() if self.storage_options is None else self.storage_options
         )
         store = zarr.storage.FSStore(
             url=self.filename, mode="r", **storage_options
         )
-
-        cache_wrapper = zarr.storage.LRUStoreCache(
-            store, max_size=self.cache_size
-        )
-        self._file = zarr.open_group(store=cache_wrapper, mode="r")
+        self._file = zarr.open_group(store=store, mode="r")
 
     def _verify_correct_units(self):
         self._unit_group = self._particle_group["units"]
@@ -346,93 +348,55 @@ class ZarrTrajReader(base.ReaderBase):
 
     def _read_next_timestep(self):
         """Read next frame in trajectory"""
-        return self._read_frame(self._frame + 1)
+        if self._frame_seq is None:
+            self._frame_seq = collections.deque(range(self._n_frames))
+        # Frame sequence is already determined in the frame_seq queue
+        return self._read_frame(-1)
 
     def _read_frame(self, frame):
         """Reads data from zarrtraj file and copies to current timestep"""
-        if frame >= self._n_frames:
+        # If this is the first read in the sequence, we need to
+        # give the cache the sequence
+        if self._first_read:
+            self._cache.update_frame_seq(self._frame_seq)
+            self._first_read = False
+
+        # Stop  iteration when we've read all frames in the frame queue
+        if not self._frame_seq:
             raise IOError from None
 
-        self._frame = frame
-        ts = self.ts
-        particle_group = self._particle_group
-        ts.frame = frame
+        # Get the next frame from the cache
+        ts = self._cache.getFrame()
 
-        self.ts.time = self._time_array[self._frame]
-        self.ts.data["step"] = self._step_array[self._frame]
-
-        # Handle observables
-        if "observables" in particle_group:
-            try:
-                for key in particle_group["observables"].keys():
-                    self.ts.data[key] = self._particle_group["observables"][
-                        key
-                    ][frame]
-            except IndexError:
-                raise ValueError(
-                    "ZarrTrajReader: Observables data must be sampled at the same "
-                    + "rate as the position, velocity, and force data."
-                )
-
-        # Sets frame box dimensions
-        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
-            edges = particle_group["box/dimensions"][frame, :]
-            ts.dimensions = core.triclinic_box(*edges)
-        else:
-            ts.dimensions = None
-
-        # set the timestep positions, velocities, and forces with
-        # current frame dataset
-        if self.has_positions:
-            self._read_dataset_into_ts("positions", ts.positions)
-        if self.has_velocities:
-            self._read_dataset_into_ts("velocities", ts.velocities)
-        if self.has_forces:
-            self._read_dataset_into_ts("forces", ts.forces)
-
-        self._convert_units()
+        # Reader is responsible for converting units
+        # since this isn't related to io
+        self._convert_units(ts)
 
         return ts
 
-    def _read_dataset_into_ts(self, dataset, attribute):
-        """Reads position, velocity, or force dataset array at current frame
-        into corresponding ts attribute"""
-
-        n_atoms_now = self._particle_group[dataset][self._frame].shape[0]
-        if n_atoms_now != self.n_atoms:
-            raise ValueError(
-                f"ZarrTrajReader: Frame {self._frame} of the {dataset} dataset"
-                f" has {n_atoms_now} atoms but the initial frame"
-                " of either the postion, velocity, or force"
-                f" dataset had {self.n_atoms} atoms."
-                " MDAnalysis is unable to deal"
-                " with variable topology!"
-            )
-
-        attribute[:] = self._particle_group[dataset][self._frame]
-
-    def _convert_units(self):
+    def _convert_units(self, ts):
         """Converts position, velocity, and force values to
         MDAnalysis units. Time does not need to be converted"""
 
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             # Only convert [:3] since last 3 elements are angle
-            self.convert_pos_from_native(self.ts.dimensions[:3])
+            self.convert_pos_from_native(ts.dimensions[:3])
 
         if self.has_positions:
-            self.convert_pos_from_native(self.ts.positions)
+            self.convert_pos_from_native(ts.positions)
 
         if self.has_velocities:
-            self.convert_velocities_from_native(self.ts.velocities)
+            self.convert_velocities_from_native(ts.velocities)
 
         if self.has_forces:
-            self.convert_forces_from_native(self.ts.forces)
+            self.convert_forces_from_native(ts.forces)
 
     @staticmethod
     def parse_n_atoms(filename, storage_options=None):
-        file = zarr.open_group(
-            filename, storage_options=storage_options, mode="r"
-        )
+        storage_options = dict() if storage_options is None else storage_options
+        store = zarr.storage.FSStore(url=filename, mode="r", **storage_options)
+        file = zarr.open_group(store=store, mode="r")
+
         for group in file["particles"]:
             if group in ("positions", "velocities", "forces"):
                 n_atoms = file[f"particles/{group}"].shape[1]
@@ -447,6 +411,9 @@ class ZarrTrajReader(base.ReaderBase):
 
     def close(self):
         """Close reader"""
+        if self._cache is not None:
+            self._cache.cleanup()
+        self._frame_seq = None
         if self._file is not None:
             self._file.store.close()
 
@@ -518,12 +485,13 @@ class ZarrTrajReader(base.ReaderBase):
         access to the the sequence of frames
         the user wants. If self._frame_seq is None
         by the time the first read is called, we assume
-        the full full trajectory is being accessed 
+        the full full trajectory is being accessed
         in a for loop
         """
         if isinstance(frame, numbers.Integral):
             frame = self._apply_limits(frame)
-            self._frame_seq = collections.deque([frame])
+            if self._frame_seq is not None:
+                self._frame_seq = collections.deque([frame])
             return self._read_frame_with_aux(frame)
         elif isinstance(frame, (list, np.ndarray)):
             if len(frame) != 0 and isinstance(frame[0], (bool, np.bool_)):
@@ -533,13 +501,15 @@ class ZarrTrajReader(base.ReaderBase):
                 frame = np.arange(len(self))[frame]
             if isinstance(frame, np.ndarray):
                 frame = frame.tolist()
-            self._frame_seq = collections.deque(frame)
+            if self._frame_seq is not None:
+                self._frame_seq = collections.deque(frame)
             return base.FrameIteratorIndices(self, frame)
         elif isinstance(frame, slice):
             start, stop, step = self.check_slice_indices(
                 frame.start, frame.stop, frame.step
             )
-            self._frame_seq = collections.deque(range(start, stop, step))
+            if self._frame_seq is not None:
+                self._frame_seq = collections.deque(range(start, stop, step))
             if start == 0 and stop == len(self) and step == 1:
                 return base.FrameIteratorAll(self)
             else:
@@ -1214,7 +1184,61 @@ class ZarrTrajWriter(base.WriterBase):
         return "forces" in self._has
 
 
-class ZarrtrajFrameCache(FrameCache):
-
+class ZarrTrajAsyncFrameCache(AsyncFrameCache):
+    # https://www.geeksforgeeks.org/optimal-page-replacement-algorithm/
     def cleanup(self):
         pass
+
+    def _load_timestep(self, frame):
+        ts = self.ts
+        particle_group = self._particle_group
+        ts.frame = frame
+
+        self.ts.time = self._time_array[self._frame]
+        self.ts.data["step"] = self._step_array[self._frame]
+
+        # Handle observables
+        if "observables" in particle_group:
+            try:
+                for key in particle_group["observables"].keys():
+                    self.ts.data[key] = self._particle_group["observables"][
+                        key
+                    ][frame]
+            except IndexError:
+                raise ValueError(
+                    "ZarrTrajReader: Observables data must be sampled at the same "
+                    + "rate as the position, velocity, and force data."
+                )
+
+        # Sets frame box dimensions
+        if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
+            edges = particle_group["box/dimensions"][frame, :]
+            ts.dimensions = core.triclinic_box(*edges)
+        else:
+            ts.dimensions = None
+
+        # set the timestep positions, velocities, and forces with
+        # current frame dataset
+        if self.has_positions:
+            self._read_dataset_into_ts("positions", ts.positions)
+        if self.has_velocities:
+            self._read_dataset_into_ts("velocities", ts.velocities)
+        if self.has_forces:
+            self._read_dataset_into_ts("forces", ts.forces)
+
+    def _read_dataset_into_ts(self, dataset, attribute):
+        """Reads position, velocity, or force dataset array at current frame
+        into corresponding ts attribute"""
+
+        n_atoms_now = self._particle_group[dataset][self._frame].shape[0]
+        if n_atoms_now != self.n_atoms:
+            raise ValueError(
+                f"ZarrTrajReader: Frame {self._frame} of the {dataset} dataset"
+                f" has {n_atoms_now} atoms but the initial frame"
+                " of either the postion, velocity, or force"
+                f" dataset had {self.n_atoms} atoms."
+                " MDAnalysis is unable to deal"
+                " with variable topology!"
+            )
+
+        attribute[:] = self._particle_group[dataset][self._frame]
