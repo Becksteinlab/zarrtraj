@@ -252,6 +252,7 @@ class ZarrTrajReader(base.ReaderBase):
             dset = self._particle_group[name]
             self.n_atoms = dset.shape[1]
             self.compressor = dset.compressor
+            self.chunks = dset.chunks
             # NOTE: add filters
             break
         else:
@@ -265,7 +266,7 @@ class ZarrTrajReader(base.ReaderBase):
             self._n_frames = self._particle_group[name].shape[0]
             break
 
-        self._verify_correct_units()
+        
         self.units = {
             "time": "ps",
             "length": "nm",
@@ -273,10 +274,28 @@ class ZarrTrajReader(base.ReaderBase):
             "force": "kJ/(mol*nm)",
         }
 
+        self._obsv = set()
+        if "observables" in self._particle_group:
+            self._obsv = set(self._particle_group["observables"])
+
+        self._verify_correct_units()
+
+        # Timestep shared between reader and cache
+        self.ts = self._Timestep(
+            self.n_atoms,
+            positions=self.has_positions,
+            velocities=self.has_velocities,
+            forces=self.has_forces,
+            **self._ts_kwargs,
+        )
+
         self._frame_seq = None
         self._cache = ZarrTrajAsyncFrameCache(
             self._file,
-            self._has,
+            cache_size,
+            self.ts,
+            self._chunks[0],
+            self.has_positions
             self._obsv,
         )
         self._first_read = False
@@ -350,6 +369,7 @@ class ZarrTrajReader(base.ReaderBase):
         """Read next frame in trajectory"""
         if self._frame_seq is None:
             self._frame_seq = collections.deque(range(self._n_frames))
+        print(self._frame_seq)
         # Frame sequence is already determined in the frame_seq queue
         return self._read_frame(-1)
 
@@ -366,7 +386,7 @@ class ZarrTrajReader(base.ReaderBase):
             raise IOError from None
 
         # Get the next frame from the cache
-        ts = self._cache.getFrame()
+        ts = self._cache.get_frame()
 
         # Reader is responsible for converting units
         # since this isn't related to io
@@ -434,6 +454,7 @@ class ZarrTrajReader(base.ReaderBase):
         kwargs.setdefault("n_frames", self.n_frames)
         kwargs.setdefault("format", "ZARRTRAJ")
         kwargs.setdefault("compressor", self.compressor)
+        kwargs.setdefault("chunks", self.chunks)
         # NOTE: add filters
         kwargs.setdefault("positions", self.has_positions)
         kwargs.setdefault("velocities", self.has_velocities)

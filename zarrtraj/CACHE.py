@@ -7,6 +7,7 @@ class FrameCache(abc.ABCMeta):
 
     def __init__(
         self,
+        open_file,
         cache_size,
         timestep,
         frames_per_chunk,
@@ -14,7 +15,7 @@ class FrameCache(abc.ABCMeta):
         positions,
         velocities,
         forces,
-        obsvervables,
+        observables,
     ):
         self._cache_size = cache_size
         self._timestep = timestep
@@ -28,14 +29,14 @@ class FrameCache(abc.ABCMeta):
         self._reader_q = frame_seq.copy()
 
     @abc.abstractmethod
-    def getFrame(self):
+    def get_frame(self):
         """Call this in the reader's
         _read_next_frame() method
         """
         pass
 
     @abc.abstractmethod
-    def _load_first_timestep(self):
+    def get_first_frame(self):
         """Call this in the cache's init method
         to ensure the reader's 'reading head'
         is initialized to the first timestep
@@ -48,7 +49,7 @@ class FrameCache(abc.ABCMeta):
         pass
 
 
-class AsyncFrameCache(FrameCache, threading.thread):
+class AsyncFrameCache(FrameCache, threading.Thread):
 
     def __init__(self):
         super(FrameCache, self).__init__()
@@ -58,9 +59,10 @@ class AsyncFrameCache(FrameCache, threading.thread):
         self._mutex = threading.Lock()
         self._frame_available = threading.Condition(self._mutex)
 
-        self._load_first_timestep()
+    def get_first_frame(self):
+        pass
 
-    def getFrame(self):
+    def get_frame(self):
         if self._first_read:
             self._first_read = False
             self.start()
