@@ -870,7 +870,7 @@ class ZarrTrajWriter(base.WriterBase):
         )
         self._step = self._particle_group["step"]
         self._particle_group["time"] = zarr.empty(
-            shape=(self._first_dim,), dtype=np.int32
+            shape=(self._first_dim,), dtype=np.float32
         )
         self._time = self._particle_group["time"]
 
@@ -892,7 +892,10 @@ class ZarrTrajWriter(base.WriterBase):
     def _create_observables_dataset(self, group, data):
         """helper function to initialize a dataset for each observable"""
         self._obsv[group] = zarr.empty(
-            shape=(self._first_dim,) + data.shape, dtype=data.dtype
+            shape=(self._first_dim,) + data.shape,
+            dtype=data.dtype,
+            filters=self.filters,
+            compressor=self.compressor,
         )
 
     def _create_trajectory_dataset(self, group):
