@@ -22,6 +22,7 @@ dependencies = [
     # Earliest zarr version where BaseStore has close() method
     "zarr>=2.11.0", 
     "dask>=2023.11.0",
+    
 ]
 keywords = [
     "molecular simulations",
