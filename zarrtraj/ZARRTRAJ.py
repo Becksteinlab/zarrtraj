@@ -1108,13 +1108,13 @@ class ZarrTrajWriter(base.WriterBase):
             self._step[i] = ts.data["step"]
         except KeyError:
             self._step[i] = ts.frame
-        if len(self._step) > 1 and self._step[i] < self._step[i - 1]:
+        if i > 0 and self._step[i] < self._step[i - 1]:
             raise ValueError(
                 "ZarrTrajWriter: The Zarrtraj standard dictates that the step "
                 "dataset must increase monotonically in value."
             )
         self._time[i] = self.convert_time_to_native(ts.time, inplace=False)
-        if len(self._time) > 1 and self._time[i] < self._time[i - 1]:
+        if i > 0 and self._time[i] < self._time[i - 1]:
             raise ValueError(
                 "ZarrTrajWriter: The Zarrtraj standard dictates that the time "
                 "dataset must increase monotonically in value."
