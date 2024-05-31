@@ -241,7 +241,7 @@ class ZarrTrajReader(base.ReaderBase):
             dset = self._particle_group[name]
             self.n_atoms = dset.shape[1]
             self.compressor = dset.compressor
-            # NOTE: add filters
+            self.filters = dset.filters
             break
         else:
             raise NoDataError(
@@ -463,7 +463,7 @@ class ZarrTrajReader(base.ReaderBase):
         kwargs.setdefault("n_frames", self.n_frames)
         kwargs.setdefault("format", "ZARRTRAJ")
         kwargs.setdefault("compressor", self.compressor)
-        # NOTE: add filters
+        kwargs.setdefault("filters", self.filters)
         kwargs.setdefault("positions", self.has_positions)
         kwargs.setdefault("velocities", self.has_velocities)
         kwargs.setdefault("forces", self.has_forces)
@@ -885,7 +885,8 @@ class ZarrTrajWriter(base.WriterBase):
         self._particle_group.require_group("box")
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             self._particle_group["box"].attrs["boundary"] = "periodic"
-            self._particle_group["box"]["dimensions"] = zarr.empty(
+            self._particle_group["box"].empty(
+                "dimensions",
                 shape=(self._first_dim, 3, 3),
                 dtype=np.float32,
                 compressor=self.compressor,
@@ -896,12 +897,12 @@ class ZarrTrajWriter(base.WriterBase):
             # boundary attr must be "none"
             self._particle_group["box"].attrs["boundary"] = "none"
 
-        self._particle_group["step"] = zarr.empty(
-            shape=(self._first_dim,), dtype=np.int32
+        self._particle_group.empty(
+            "step", shape=(self._first_dim,), dtype=np.int32
         )
         self._step = self._particle_group["step"]
-        self._particle_group["time"] = zarr.empty(
-            shape=(self._first_dim,), dtype=np.float32
+        self._particle_group.empty(
+            "time", shape=(self._first_dim,), dtype=np.float32
         )
         self._time = self._particle_group["time"]
 
@@ -922,7 +923,8 @@ class ZarrTrajWriter(base.WriterBase):
 
     def _create_observables_dataset(self, group, data):
         """helper function to initialize a dataset for each observable"""
-        self._obsv[group] = zarr.empty(
+        self._obsv.empty(
+            group,
             shape=(self._first_dim,) + data.shape,
             dtype=data.dtype,
             filters=self.filters,
@@ -932,7 +934,8 @@ class ZarrTrajWriter(base.WriterBase):
     def _create_trajectory_dataset(self, group):
         """helper function to initialize a dataset for
         position, velocity, and force"""
-        self._particle_group[group] = zarr.empty(
+        self._particle_group.empty(
+            group,
             shape=(self._first_dim, self.n_atoms, 3),
             dtype=np.float32,
             chunks=self.chunks,
