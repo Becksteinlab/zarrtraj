@@ -266,7 +266,6 @@ class ZarrTrajReader(base.ReaderBase):
             self._n_frames = self._particle_group[name].shape[0]
             break
 
-        
         self.units = {
             "time": "ps",
             "length": "nm",
@@ -295,8 +294,8 @@ class ZarrTrajReader(base.ReaderBase):
             cache_size,
             self.ts,
             self._chunks[0],
-            self.has_positions
-            self._obsv,
+            self.has_positions,
+            self.self._obsv,
         )
         self._first_read = False
 
