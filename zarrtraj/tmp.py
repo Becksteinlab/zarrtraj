@@ -1,7 +1,6 @@
 import fsspec
 import kerchunk.hdf
 import ujson
-import xarray as xr
 import os
 import zarr
 
@@ -13,18 +12,16 @@ url = "s3://zarrtraj-test-data/peg.h5md"
 
 with fsspec.open(url, **so) as inf:
     h5chunks = kerchunk.hdf.SingleHdf5ToZarr(inf, url, inline_threshold=100)
-    with open("single_file_kerchunk.json", "wb") as f:
-        f.write(ujson.dumps(h5chunks.translate()).encode())
+    fo = h5chunks.translate()
 
 
 fs = fsspec.filesystem(
     "reference",
-    fo="single_file_kerchunk.json",
+    fo=fo,
     remote_protocol="s3",
-    remote_options=dict(anon=False),
+    remote_options=so,
     skip_instance_cache=True,
 )
 
 z = zarr.open_group(fs.get_mapper(""), mode="r")
-
-print(z.tree())
+print(z.particles)
