@@ -89,6 +89,7 @@ class ZARRH5MDReader(base.ReaderBase):
         storage_options=None,
         convert_units=True,
         group=None,
+        cache_size=(100 * 1024**2),
         **kwargs,
     ):
         """
@@ -121,40 +122,61 @@ class ZARRH5MDReader(base.ReaderBase):
             'force' group
 
         """
+        # Set to none so close() can be called
+        self._file = None
+        self._cache = None
         if not HAS_ZARR:
             raise RuntimeError("Please install zarr")
         super(ZARRH5MDReader, self).__init__(filename, **kwargs)
         self.filename = filename
         self.convert_units = convert_units
-        self._group = group
-        self._so = storage_options if storage_options is not None else {}
-
+        self._cache_size = cache_size
+        so = storage_options if storage_options is not None else {}
         self._frame_seq = None
 
         self._determine_protocol()
+        self._mapping = get_mapping_for(
+            filename, self._protocol, get_extension(self.filename), so
+        )
+
+        self._group = group
         self._open_trajectory()
-        self._validate_file()
+
+        # Though the user may not want all elements and therefore
+        # won't want a steplist constructed from all elements,
+        # this will cover the majority of cases.
+        # For cases where the user wants only a subset of the elements,
+        # a new steplist and dicts can be created
+
+        self._global_steparray = create_steplist(
+            [h5mdelement.step for h5mdelement in self._elements.values()]
+        )
+
+        self._stepmap = create_stepmap(
+            self._elements,
+        )
 
         # Gets some info about what settings the datasets were created with
         # from first available group
-        for name in self._has:
-            dset = self._particle_group[f"{name}/value"]
-            self.n_atoms = dset.shape[1]
-            self.compressor = dset.compressor
-            self.chunks = dset.chunks
-            self.filters = dset.filters
-            break
+        for name in ("position", "velocity", "force"):
+            if name in self._elements:
+                dset = self._elements[name].value
+                self.n_atoms = dset.shape[1]
+                self.compressor = dset.compressor
+                self.chunks = dset.chunks
+                self.filters = dset.filters
+                break
         else:
             raise NoDataError(
-                "Provide at least a position, velocity"
-                " or force group in the h5md file."
+                "Provide at least a position, velocity "
+                "or force group in the h5md file."
             )
 
         self.ts = self._Timestep(
             self.n_atoms,
-            positions=self.has_positions,
-            velocities=self.has_velocities,
-            forces=self.has_forces,
+            positions=("position" in self._elements),
+            velocities=("velocity" in self._elements),
+            forces=("force" in self._elements),
             **self._ts_kwargs,
         )
 
@@ -165,98 +187,93 @@ class ZARRH5MDReader(base.ReaderBase):
             "force": None,
         }
         self._set_translated_units()  # fills units dictionary
-
-        # For testing, set the cache size to 100mb
-        self._cache_size = 100 * 1024**2
+        self._check_units()  # raises error if units missing
 
         self._cache = self._cache_type(
-            self._file, self._cache_size, self.ts, self.chunks[0], self._group
+            self._file,
+            self._cache_size,
+            self.ts,
+            self.chunks[0],
+            self._elements,
+            self._global_steparray,
+            self._stepmap,
         )
 
-        self._cache.get_first_frame()
+        self._cache.load_first_frame()
 
     def _set_translated_units(self):
         """converts units from H5MD to MDAnalysis notation
         and fills units dictionary"""
 
-        # need this dictionary to associate 'position': 'length'
-        _group_unit_dict = {
-            "time": "time",
-            "position": "length",
-            "velocity": "velocity",
-            "force": "force",
-        }
+        self.units = collections.defaultdict(lambda: None)
 
-        for group, unit in _group_unit_dict.items():
-            self._translate_h5md_units(group, unit)
-            self._check_units(group, unit)
+        # Datasets are self-describing, so units must be provided for each
+        # additionally, all time units must be the same and box/edges
+        # and positions need to share the same length unit
 
-    def _translate_h5md_units(self, group, unit):
-        """stores the translated unit string into the units dictionary"""
+        # Length
+        l_units = []
 
-        errmsg = "{} unit '{}' is not recognized by H5MDReader. Please raise"
-        " an issue in https://github.com/MDAnalysis/mdanalysis/issues"
+        for elem in ("box/edges", "position"):
+            if elem in self._elements:
+                try:
+                    len_unit = self._unit_translation["length"][
+                        self._elements[elem].valueunit
+                    ]
+                except KeyError:
+                    raise RuntimeError(
+                        f"length unit '{self._elements[elem].valueunit}' "
+                        "is not recognized by ZarrH5MDReader. "
+                    )
+                l_units.append(len_unit)
 
-        # doing time unit separately because time has to fish for
-        # first available parent group - either position, velocity, or force
-        if unit == "time":
-            for name in self._has:
-                if "unit" in self._particle_group[name]["time"].attrs:
-                    try:
-                        self.units["time"] = self._unit_translation["time"][
-                            self._particle_group[name]["time"].attrs["unit"]
-                        ]
-                        break
-                    except KeyError:
-                        raise RuntimeError(
-                            errmsg.format(
-                                unit,
-                                self._particle_group[name]["time"].attrs[
-                                    "unit"
-                                ],
-                            )
-                        ) from None
-
+        if all(l_unit == l_units[0] for l_unit in l_units):
+            self.units["length"] = l_units[0]
         else:
-            if group in self._has:
-                if "unit" in self._particle_group[group]["value"].attrs:
-                    try:
-                        self.units[unit] = self._unit_translation[unit][
-                            self._particle_group[group]["value"].attrs["unit"]
-                        ]
-                    except KeyError:
-                        raise RuntimeError(
-                            errmsg.format(
-                                unit,
-                                self._particle_group[group]["value"].attrs[
-                                    "unit"
-                                ],
-                            )
-                        ) from None
+            raise RuntimeError(
+                "Length units of position and box/edges do not match"
+            )
 
-            # if position group is not provided, can still get 'length' unit
-            # from unitcell box
-            if ("position" not in self._has) and (
-                "edges" in self._particle_group["box"]
-            ):
-                if "unit" in self._particle_group["box/edges/value"].attrs:
-                    try:
-                        self.units["length"] = self._unit_translation["length"][
-                            self._particle_group["box/edges/value"].attrs[
-                                "unit"
-                            ]
-                        ]
-                    except KeyError:
-                        raise RuntimeError(
-                            errmsg.format(
-                                unit,
-                                self._particle_group["box/edges/value"].attrs[
-                                    "unit"
-                                ],
-                            )
-                        ) from None
+        if "velocity" in self._elements:
+            try:
+                self.units["velocity"] = self._unit_translation["velocity"][
+                    self._elements["velocity"].valueunit
+                ]
+            except KeyError:
+                raise RuntimeError(
+                    f"velocity unit '{self._elements['velocity'].valueunit}' "
+                    "is not recognized by ZarrH5MDReader. "
+                )
 
-    def _check_units(self, group, unit):
+        if "force" in self._elements:
+            try:
+                self.units["force"] = self._unit_translation["force"][
+                    self._elements["force"].valueunit
+                ]
+            except KeyError:
+                raise RuntimeError(
+                    f"force unit '{self._elements['force'].valueunit}' "
+                    "is not recognized by ZarrH5MDReader. "
+                )
+
+        t_units = []
+        for elem in self._elements:
+            if self._elements[elem].has_time:
+                try:
+                    time_unit = self._unit_translation["time"][
+                        self._elements[elem].timeunit
+                    ]
+                except KeyError:
+                    raise RuntimeError(
+                        f"time unit '{self._elements[elem].timeunit}' "
+                        "is not recognized by ZarrH5MDReader. "
+                    )
+                t_units.append(time_unit)
+
+        if all(t_unit == t_units[0] for t_unit in t_units):
+            self.units["time"] = t_units[0]
+
+    def _check_units(self):
         """Raises error if no units are provided from H5MD file
         and convert_units=True"""
 
@@ -267,21 +284,26 @@ class ZARRH5MDReader(base.ReaderBase):
         " set to ``True``. MDAnalysis sets ``convert_units=True`` by default."
         " Set ``convert_units=False`` to load Universe without units."
 
-        if unit == "time":
-            if self.units["time"] is None:
-                raise ValueError(errmsg)
+        _group_unit_dict = {
+            "time": "time",
+            "position": "length",
+            "velocity": "velocity",
+            "force": "force",
+        }
 
-        else:
-            if self._has[group]:
-                if self.units[unit] is None:
+        for group, unit in _group_unit_dict.items():
+            if unit == "time":
+                if self.units["time"] is None:
                     raise ValueError(errmsg)
 
+            else:
+                if group in self._elements:
+                    if self.units[unit] is None:
+                        raise ValueError(errmsg)
+
     def _determine_protocol(self):
-        """Determines the correct method for opening the file
-        given the protocol and file extension"""
-
-        self._mapping = None
-
+        """Prepares the correct method for managing the file
+        given the protocol"""
         self._protocol = get_protocol(self.filename)
         if self._protocol == "s3":
             self._cache_type = ZarrLRUCache
@@ -293,27 +315,21 @@ class ZARRH5MDReader(base.ReaderBase):
                 f"Unsupported protocol '{self._protocol}' for H5MD file."
             )
 
-        ext = get_extension(self.filename)
-        if ext == ".zarr":
-            self._mapping = zarr.storage.FSStore(
-                self.filename, mode="r", **self._so
-            )
-        elif ext == ".h5md" or self._ext == ".h5":
-            self._mapping = get_h5_zarr_mapping(
-                self.filename, self._protocol, self._so
-            )
-
     def _open_trajectory(self):
-        """Opens the trajectory file using zarr library"""
+        """Opens the trajectory file using zarr library,
+        sets the group if not already set, and
+        fills the elements dictionary."""
         self._frame = -1
+        # special case: using builtin LRU cache
+        # normally the cache object handles cache construction
+        if self._cache_type == ZarrLRUCache:
+            cache = zarr.storage.LRUStoreCache(
+                self._mapping, max_size=self._cache_size
+            )
+            self._file = zarr.open_group(store=cache, mode="r")
+        else:
+            self._file = zarr.open_group(self._mapping, mode="r")
 
-        self._file = zarr.open_group(self._mapping, mode="r")
-
-    def _validate_file(self):
-        """Validates the layout against H5MD standard as
-        much as possible before handing off the open file
-        to the cache object
-        """
         if self._group is None:
             if len(self._file["particles"]) == 1:
                 self._group = list(self._file["particles"])[0]
@@ -323,146 +339,82 @@ class ZARRH5MDReader(base.ReaderBase):
                     "contain exactly one group in 'particles'"
                 )
 
-        self._particle_group = self._file["particles"][self._group]
+        particle_group = self._file["particles"][self._group]
+        self._elements = dict()
 
-        self._has = {
-            name
-            for name in self._particle_group
-            if name in ("position", "velocity", "force")
-        }
-
-        # _elements is a dictionary of
-        # {h5md element name : dataset path in _file}
-        self._elements = {}
-        for elem in ("position", "velocity", "force"):
-            if elem in self._particle_group:
-                self._elements[elem] = self._particle_group[elem].name
-        if (
-            "box" in self._particle_group
-            and "edges" in self._particle_group["box"]
-        ):
-            self._elements["edges"] = self._particle_group["box/edges"].name
         if "observables" in self._file:
             for obsv in self._file["observables"]:
-                self._elements[obsv] = self._file["observables"][obsv].name
-        elif "observables" in self._particle_group:
-            for obsv in self._particle_group["observables"]:
-                self._elements[obsv] = self._particle_group["observables"][
-                    obsv
-                ].name
+                if "value" in obsv:
+                    self._elements[obsv.basename] = H5MDElement(obsv)
+            if self._group in self._file["observables"]:
+                for obsv in self._file["observables"][self._group]:
+                    if "value" in obsv:
+                        self._elements[f"{self._group}/{obsv.name}"] = (
+                            H5MDElement(obsv)
+                        )
 
-        if self._particle_group["box"].attrs["dimension"] != 3:
+        if "box" not in particle_group:
+            raise NoDataError("H5MD file must contain a 'box' group")
+        if particle_group["box"].attrs["dimension"] != 3:
             raise ValueError(
-                "MDAnalysis only supports 3-dimensional" " simulation boxes"
+                "MDAnalysis only supports 3-dimensional simulation boxes"
             )
+
+        particle_group_elems = ["position", "velocity", "force", "box/edges"]
+        if particle_group["box"].attrs["boundary"] == ["periodic"] * 3:
+            if "box/edges" not in particle_group:
+                raise NoDataError(
+                    "H5MD file must contain a 'box/edges' group if "
+                    "simulation box is 'periodic'"
+                )
+        elif particle_group["box"].attrs["boundary"] != ["none"] * 3:
+            raise ValueError(
+                "MDAnalysis only supports H5MD simulation boxes for which "
+                "all dimensions are 'periodic' or all dimensions are 'none"
+            )
+
+        for elem in particle_group_elems:
+            if elem in particle_group:
+                elem_gr = particle_group[elem]
+                h5md_elem = H5MDElement(elem_gr)
+                if h5md_elem.is_time_independent():
+                    raise ValueError(
+                        "MDAnalysis does not support time-independent "
+                        "positions, velocities, forces, or simulation boxes"
+                    )
+                self._elements[elem] = h5md_elem
 
     def _read_next_timestep(self):
         """read next frame in trajectory"""
         if self._frame_seq is None:
             self._frame_seq = collections.deque(range(self.n_frames))
             print(self._frame_seq)
+
+        if self._frame == -1:
+            self._cache.update_frame_seq(self._frame_seq)
+            self._cache.update_desired_dsets(
+                self._elements, self._global_steparray, self._stepmap
+            )
+
         return self._read_frame(self._frame + 1)
 
     def _read_frame(self, frame):
         """reads data from h5md file and copies to current timestep"""
-        try:
-            for name, value in self._has.items():
-                if value:
-                    _ = self._particle_group[name]["step"][frame]
-                    break
-            else:
-                raise NoDataError(
-                    "Provide at least a position, velocity"
-                    " or force group in the h5md file."
-                )
-        except (ValueError, IndexError):
-            raise IOError from None
+        if not self._frame_seq:
+            raise StopIteration
 
-        self._frame = frame
-        ts = self.ts
-        particle_group = self._particle_group
-        ts.frame = frame
+        self._cache.load_frame()
 
-        # fills data dictionary from 'observables' group
-        # Note: dt is not read into data as it is not decided whether
-        # Timestep should have a dt attribute (see Issue #2825)
-        self._copy_to_data()
-
-        # Sets frame box dimensions
-        # Note: H5MD files must contain 'box' group in each 'particles' group
-        if "edges" in particle_group["box"]:
-            edges = particle_group["box/edges/value"][frame, :]
-            # A D-dimensional vector or a D × D matrix, depending on the
-            # geometry of the box, of Float or Integer type. If edges is a
-            # vector, it specifies the space diagonal of a cuboid-shaped box.
-            # If edges is a matrix, the box is of triclinic shape with the edge
-            # vectors given by the rows of the matrix.
-            if edges.shape == (3,):
-                ts.dimensions = [*edges, 90, 90, 90]
-            else:
-                ts.dimensions = core.triclinic_box(*edges)
-        else:
-            ts.dimensions = None
-
-        # set the timestep positions, velocities, and forces with
-        # current frame dataset
-        if self._has["position"]:
-            self._read_dataset_into_ts("position", ts.positions)
-        if self._has["velocity"]:
-            self._read_dataset_into_ts("velocity", ts.velocities)
-        if self._has["force"]:
-            self._read_dataset_into_ts("force", ts.forces)
+        if self.ts.time == -1.0:
+            raise ValueError(
+                "MDAnalysis requires that time data is available "
+                "for each integration step in the trajectory"
+            )
 
         if self.convert_units:
             self._convert_units()
 
-        return ts
-
-    def _copy_to_data(self):
-        """assigns values to keys in data dictionary"""
-
-        if "observables" in self._file:
-            for key in self._file["observables"].keys():
-                self.ts.data[key] = self._file["observables"][key]["value"][
-                    self._frame
-                ]
-
-        # pulls 'time' and 'step' out of first available parent group
-        for name, value in self._has.items():
-            if value:
-                if "time" in self._particle_group[name]:
-                    self.ts.time = self._particle_group[name]["time"][
-                        self._frame
-                    ]
-                    break
-        for name, value in self._has.items():
-            if value:
-                if "step" in self._particle_group[name]:
-                    self.ts.data["step"] = self._particle_group[name]["step"][
-                        self._frame
-                    ]
-                    break
-
-    def _read_dataset_into_ts(self, dataset, attribute):
-        """reads position, velocity, or force dataset array at current frame
-        into corresponding ts attribute"""
-
-        n_atoms_now = self._particle_group[f"{dataset}/value"][
-            self._frame
-        ].shape[0]
-        if n_atoms_now != self.n_atoms:
-            raise ValueError(
-                f"Frame {self._frame} of the {dataset} dataset"
-                f" has {n_atoms_now} atoms but the initial frame"
-                " of either the postion, velocity, or force"
-                f" dataset had {self.n_atoms} atoms."
-                " MDAnalysis is unable to deal"
-                " with variable topology!"
-            )
-
-        self._particle_group[f"{dataset}/value"].read_direct(
-            attribute, source_sel=np.s_[self._frame, :]
-        )
+        return self.ts
 
     def _convert_units(self):
         """converts time, position, velocity, and force values if they
@@ -473,24 +425,24 @@ class ZARRH5MDReader(base.ReaderBase):
 
         self.ts.time = self.convert_time_from_native(self.ts.time)
 
-        if (
-            "edges" in self._particle_group["box"]
-            and self.ts.dimensions is not None
-        ):
+        if "box/edges" in self._elements and self.ts.dimensions is not None:
             self.convert_pos_from_native(self.ts.dimensions[:3])
 
-        if self._has["position"]:
+        if self.ts.has_positions:
             self.convert_pos_from_native(self.ts.positions)
 
-        if self._has["velocity"]:
+        if self.ts.has_velocities:
             self.convert_velocities_from_native(self.ts.velocities)
 
-        if self._has["force"]:
+        if self.ts.has_forces:
             self.convert_forces_from_native(self.ts.forces)
 
     def close(self):
         """close reader"""
-        self._file.close()
+        if self._cache is not None:
+            self._cache.cleanup()
+        if self._file is not None:
+            self._file.store.close()
 
     def _reopen(self):
         """reopen trajectory
@@ -534,12 +486,12 @@ class ZARRH5MDReader(base.ReaderBase):
         """
         if n_atoms is None:
             n_atoms = self.n_atoms
-        kwargs.setdefault("driver", self._driver)
-        kwargs.setdefault("compression", self.compression)
-        kwargs.setdefault("compression_opts", self.compression_opts)
-        kwargs.setdefault("positions", self.has_positions)
-        kwargs.setdefault("velocities", self.has_velocities)
-        kwargs.setdefault("forces", self.has_forces)
+        kwargs.setdefault("compressor", self.compressor)
+        kwargs.setdefault("filters", self.filters)
+        kwargs.setdefault("chunks", self.chunks)
+        kwargs.setdefault("positions", ("position" in self._elements))
+        kwargs.setdefault("velocities", ("velocity" in self._elements))
+        kwargs.setdefault("forces", ("force" in self._elements))
         return H5MDWriter(filename, n_atoms, **kwargs)
 
     def __getitem__(self, frame):
@@ -557,7 +509,7 @@ class ZARRH5MDReader(base.ReaderBase):
 
         Note
         ----
-        ZarrtrajReader overrides this to get
+        ZarrtrajReader overrides this method to get
         access to the the sequence of frames
         the user wants. If self._frame_seq is None
         by the time the first read is called, we assume
@@ -568,7 +520,6 @@ class ZARRH5MDReader(base.ReaderBase):
             frame = self._apply_limits(frame)
             if self._frame_seq is None:
                 self._frame_seq = collections.deque([frame])
-                print(self._frame_seq)
             return self._read_frame_with_aux(frame)
         elif isinstance(frame, (list, np.ndarray)):
             if len(frame) != 0 and isinstance(frame[0], (bool, np.bool_)):
@@ -602,30 +553,25 @@ class ZARRH5MDReader(base.ReaderBase):
     @property
     def n_frames(self):
         """number of frames in trajectory"""
-        for name, value in self._has.items():
-            if value:
-                return self._particle_group[name]["value"].shape[0]
+        for elem, h5mdelement in self._elements.items():
+            if elem in ("position", "velocity", "force"):
+                return h5mdelement.value.shape[0]
 
     @staticmethod
     def _format_hint(thing):
         """Can this Reader read *thing*"""
         # nb, filename strings can still get passed through if
         # format='H5MD' is used
-        return HAS_H5PY and isinstance(thing, h5py.File)
+        pass
 
     @staticmethod
     def parse_n_atoms(filename, group=None, so=None):
-        mapping = None
         so = so if so is not None else {}
-
         protocol = get_protocol(filename)
         ext = get_extension(filename)
-
-        if ext == ".zarr":
-            mapping = zarr.storage.FSStore(filename, mode="r", **so)
-        elif ext == ".h5md" or ext == ".h5":
-            mapping = get_h5_zarr_mapping(filename, protocol, so)
+        mapping = get_mapping_for(filename, protocol, ext, so)
         file = zarr.open_group(mapping, mode="r")
+
         if group is None:
             if len(file["particles"]) == 1:
                 group = list(file["particles"])[0]
@@ -635,6 +581,7 @@ class ZARRH5MDReader(base.ReaderBase):
                     "trajectory file, as `group` kwarg was not provided, "
                     "and H5MD file did not contain exactly one group in 'particles'"
                 )
+
         for dset in ("position", "velocity", "force"):
             if dset in file["particles"][group]:
                 return file["particles"][group][dset]["value"].shape[1]
@@ -1349,54 +1296,227 @@ class ZarrNoCache(FrameCache):
     Used for reading H5MD formatted files from disk"""
 
     def __init__(
-        self, open_file, cache_size, timestep, frames_per_chunk, group
+        self,
+        open_file,
+        cache_size,
+        timestep,
+        frames_per_chunk,
+        elements,
+        global_steparray,
+        stepmap,
     ):
         super().__init__(open_file, cache_size, timestep, frames_per_chunk)
-        self._group = group
-        self._particle_group = self._file["particles"][group]
+        self._elements = elements
+        self._global_steparray = global_steparray
+        self._stepmap = stepmap
 
-    def update_desired_dsets(self, dsets: dict):
-        self._dsets = dsets
-        self._step_maps = {dset: {} for dset in self._dsets.keys()}
-        # A step map is a map from an H5MDElements' step values
-        # i.e. element["step"][:]
-        # to the index at which you can find data for that step
-        # i.e to check if there is position data at step x and then grab it,
-        # you would do
-        # if step in self._step_maps["position"]:
-        #   step_map = self._step_maps["position"]
-        #   pos = position["value"][step_map[step]]
-        # "all" is a special value that means all steps
-        self._construct_step_time_lists()
+    def update_desired_dsets(
+        self,
+        elements: Dict[str, H5MDElement],
+        global_steparray: np.ndarray,
+        stepmap: Dict[int, Dict[int, int]],
+    ):
+        self._elements = elements
+        self._global_steparray = global_steparray
+        self._stepmap = stepmap
 
-    def _construct_step_time_lists(self):
-        """Constructs a list of 1. unique steps and 2. unique times
-        from the H5MD file
+    def load_first_frame(self):
+        self._load_timestep_frame(0)
 
-        reader[frame] will return a timestep filled with
-        data from all elements that contain data at self._step_list[frame]"""
-        all_elem_steps = []
-        all_elem_times = []
-        for dset, zarrpath in self._dsets.items():
-            if (
-                "step" in self._file[zarrpath]
-                and "time" in self._file[zarrpath]
-            ):
-                step = self._file[zarrpath]["step"][:]
-                all_elem_steps.append(step)
-                time = self._file[zarrpath]["time"][:]
-                all_elem_times.append(time)
-                self._step_maps[dset] = {
-                    step_val: i for i, step_val in enumerate(step)
-                }
-        self._step_list = np.unique(np.concatenate(all_elem_steps))
-        self._time_list = np.unique(np.concatenate(all_elem_times))
+    def load_frame(self):
+        """Reader responsbile for raising StopIteration when no more frames"""
+        self._load_timestep_frame(self._frame_seq.popleft())
 
-    def get_first_frame(self):
-        # Determine which datasets have values for this timestep
-        self._timestep
-        # Read all data into the timestep
+    def _load_timestep_frame(self, frame):
+        # Reader must handle unit conversions
+        # reader must ensure time value present (not -1)
+        step = self._global_steparray[frame]
+
+        self._timestep.frame = frame
+        self._timestep.data["step"] = step
+
+        # Assume all time values from the same integration step
+        # are exactly the same
+        curr_time = None
+
+        if "box/edges" in self._elements:
+            if step in self._stepmap["box/edges"]:
+                edges_index = self._stepmap["box/edges"][step]
+                edges = self._elements["box/edges"].value[edges_index]
+                if edges.shape == (3,):
+                    self._timestep.dimensions = [*edges, 90, 90, 90]
+                else:
+                    self._timestep.dimensions = core.triclinic_box(*edges)
+                if curr_time is None and self._elements["box/edges"].has_time():
+                    curr_time = self._elements["box/edges"].time[edges_index]
+            else:
+                self._timestep.dimensions = None
+
+        if "position" in self._elements:
+            if step in self._stepmap["position"]:
+                self._timestep.has_positions = True
+                pos_index = self._stepmap["position"][step]
+                self._timestep.positions = self._elements["position"].value[
+                    pos_index
+                ]
+                if curr_time is None and self._elements["position"].has_time():
+                    curr_time = self._elements["position"].time[pos_index]
+            else:
+                self._timestep.has_positions = False
+
+        if "velocity" in self._elements:
+            if step in self._stepmap["velocity"]:
+                self._timestep.has_velocities = True
+                vel_index = self._stepmap["velocity"][step]
+                self._timestep.velocities = self._elements["velocity"].value[
+                    vel_index
+                ]
+                if curr_time is None and self._elements["velocity"].has_time():
+                    curr_time = self._elements["velocity"].time[vel_index]
+            else:
+                self._timestep.has_velocities = False
+
+        if "force" in self._elements:
+            if step in self._stepmap["force"]:
+                self._timestep.has_forces = True
+                force_index = self._stepmap["force"][step]
+                self._timestep.forces = self._elements["force"].value[
+                    force_index
+                ]
+                if curr_time is None and self._elements["force"].has_time():
+                    curr_time = self._elements["force"].time[force_index]
+            else:
+                self._timestep.has_forces = False
+
+        if curr_time is not None:
+            self._timestep.time = curr_time
+        else:
+            self._timestep.time = -1.0
+
+        exclude = {"position", "velocity", "force", "box/edges"}
+
+        for elem, h5mdelement in self._elements.items():
+            if elem not in exclude:
+                if step in self._stepmap[elem]:
+                    obsv_index = self._stepmap[elem][step]
+                    self._timestep.data[elem] = h5mdelement.value[obsv_index]
+                else:
+                    # must be time independent
+                    self._timestep.data[elem] = h5mdelement.value[()]
+
+    def cleanup(self):
+        pass
 
 
 class ZarrLRUCache(FrameCache):
-    pass
+    def __init__(
+        self,
+        open_file,
+        cache_size,
+        timestep,
+        frames_per_chunk,
+        elements,
+        global_steparray,
+        stepmap,
+    ):
+        super().__init__(open_file, cache_size, timestep, frames_per_chunk)
+        self._elements = elements
+        self._global_steparray = global_steparray
+        self._stepmap = stepmap
+
+    def update_desired_dsets(
+        self,
+        elements: Dict[str, H5MDElement],
+        global_steparray: np.ndarray,
+        stepmap: Dict[int, Dict[int, int]],
+    ):
+        self._elements = elements
+        self._global_steparray = global_steparray
+        self._stepmap = stepmap
+
+    def load_first_frame(self):
+        self._load_timestep_frame(0)
+
+    def load_frame(self):
+        """Reader responsbile for raising StopIteration when no more frames"""
+        self._load_timestep_frame(self._frame_seq.popleft())
+
+    def _load_timestep_frame(self, frame):
+        # Reader must handle unit conversions
+        # reader must ensure time value present (not -1)
+        step = self._global_steparray[frame]
+
+        self._timestep.frame = frame
+        self._timestep.data["step"] = step
+
+        # Assume all time values from the same integration step
+        # are exactly the same
+        curr_time = None
+
+        if "box/edges" in self._elements:
+            if step in self._stepmap["box/edges"]:
+                edges_index = self._stepmap["box/edges"][step]
+                edges = self._elements["box/edges"].value[edges_index]
+                if edges.shape == (3,):
+                    self._timestep.dimensions = [*edges, 90, 90, 90]
+                else:
+                    self._timestep.dimensions = core.triclinic_box(*edges)
+                if curr_time is None and self._elements["box/edges"].has_time():
+                    curr_time = self._elements["box/edges"].time[edges_index]
+            else:
+                self._timestep.dimensions = None
+
+        if "position" in self._elements:
+            if step in self._stepmap["position"]:
+                self._timestep.has_positions = True
+                pos_index = self._stepmap["position"][step]
+                self._timestep.positions = self._elements["position"].value[
+                    pos_index
+                ]
+                if curr_time is None and self._elements["position"].has_time():
+                    curr_time = self._elements["position"].time[pos_index]
+            else:
+                self._timestep.has_positions = False
+
+        if "velocity" in self._elements:
+            if step in self._stepmap["velocity"]:
+                self._timestep.has_velocities = True
+                vel_index = self._stepmap["velocity"][step]
+                self._timestep.velocities = self._elements["velocity"].value[
+                    vel_index
+                ]
+                if curr_time is None and self._elements["velocity"].has_time():
+                    curr_time = self._elements["velocity"].time[vel_index]
+            else:
+                self._timestep.has_velocities = False
+
+        if "force" in self._elements:
+            if step in self._stepmap["force"]:
+                self._timestep.has_forces = True
+                force_index = self._stepmap["force"][step]
+                self._timestep.forces = self._elements["force"].value[
+                    force_index
+                ]
+                if curr_time is None and self._elements["force"].has_time():
+                    curr_time = self._elements["force"].time[force_index]
+            else:
+                self._timestep.has_forces = False
+
+        if curr_time is not None:
+            self._timestep.time = curr_time
+        else:
+            self._timestep.time = -1.0
+
+        exclude = {"position", "velocity", "force", "box/edges"}
+
+        for elem, h5mdelement in self._elements.items():
+            if elem not in exclude:
+                if step in self._stepmap[elem]:
+                    obsv_index = self._stepmap[elem][step]
+                    self._timestep.data[elem] = h5mdelement.value[obsv_index]
+                else:
+                    # must be time independent
+                    self._timestep.data[elem] = h5mdelement.value[()]
+
+    def cleanup(self):
+        pass

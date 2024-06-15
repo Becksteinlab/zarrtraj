@@ -3,14 +3,10 @@ import threading
 from collections import deque
 
 
-class FrameCache(abc.ABCMeta):
+class FrameCache(abc.ABC):
 
     def __init__(
-        self,
-        open_file,
-        cache_size,
-        timestep,
-        frames_per_chunk,
+        self, open_file, cache_size, timestep, frames_per_chunk, *args, **kwargs
     ):
         self._file = open_file
         self._cache_size = cache_size
@@ -24,30 +20,28 @@ class FrameCache(abc.ABCMeta):
         self._frame_seq = frame_seq
 
     @abc.abstractmethod
-    def update_desired_dsets(self, dsets: dict):
+    def update_desired_dsets(self, *args, **kwargs):
         """Call this in the reader on the first read
         to inform the cache of which datasets it
-        should pull into the cache
+        should pull into the cache for each call to
+        load_frame()
 
         The reader is reponsible for ensuring
         the requested datasets are actually
         present in the file before requesting them
         from the cache
-
-        Dsets is a dict to allow each reader to
-        decide how it will pass datasets
         """
         pass
 
     @abc.abstractmethod
-    def get_frame(self):
+    def load_frame(self, *args, **kwargs):
         """Call this in the reader's
         _read_next_frame() method
         """
         pass
 
     @abc.abstractmethod
-    def get_first_frame(self):
+    def load_first_frame(self, *args, **kwargs):
         """Call this in the cache's init method
         to ensure the reader's 'reading head'
         is initialized to the first timestep
@@ -55,7 +49,7 @@ class FrameCache(abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def cleanup(self):
+    def cleanup(self, *args, **kwargs):
         """Call this in the reader's close() method"""
         pass
 
@@ -70,10 +64,10 @@ class AsyncFrameCache(FrameCache, threading.Thread):
         self._mutex = threading.Lock()
         self._frame_available = threading.Condition(self._mutex)
 
-    def get_first_frame(self):
+    def load_first_frame(self):
         pass
 
-    def get_frame(self):
+    def load_frame(self):
         if self._first_read:
             self._first_read = False
             self.start()

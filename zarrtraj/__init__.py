@@ -5,13 +5,7 @@ This is a kit that provides the ability to read and write trajectory data in the
 
 # Add imports here
 from importlib.metadata import version
-from .ZARRTRAJ import *
-from .ZARR import *
-from .cache import *
-
-from MDAnalysis.lib import util
-import numpy as np
-import zarr
+from .ZARR import ZARRH5MDReader
 
 
 __version__ = version("zarrtraj")
