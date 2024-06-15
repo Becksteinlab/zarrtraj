@@ -149,17 +149,19 @@ class ZarrTrajReader(base.ReaderBase):
     For more information on the format, see the :ref:`zarrtraj_spec`.
     """
 
-    format = "ZARRTRAJ"
+    format = ["ZARRTRAJ", "ZARR"]
 
     @store_init_arguments
-    def __init__(self, filename, **kwargs):
+    def __init__(
+        self, filename, storage_options=None, cache_size=2**28, **kwargs
+    ):
         """
         Parameters
         ----------
         filename : :class:`zarr.Group`
-            open, readable zarrtraj file
-        convert_units : bool (optional)
-            convert units to MDAnalysis units
+            Fsspec-style path to the Zarr group
+        storage_options : dict (optional)
+            Additional options to pass to the storage backend
         **kwargs : dict
             General reader arguments.
 
@@ -188,22 +190,24 @@ class ZarrTrajReader(base.ReaderBase):
         if not HAS_ZARR:
             raise RuntimeError("ZarrTrajReader: Please install zarr")
         super(ZarrTrajReader, self).__init__(filename, **kwargs)
-        # ReaderBase calls self.filename = str(filename), which we want to undo
-        self.filename = filename
-        if not self.filename:
+        self.storage_options = storage_options
+        self._file = None
+        self.cache_size = cache_size
+        # Before opening the zarr group, check filename's protocol
+        # to see if we need to import the correct filesystem
+        self._protocol_import()
+        self._open_group()
+        if not self._file:
             raise PermissionError(
                 "ZarrTrajReader: The Zarr group is not readable"
             )
-        if self.filename.attrs["version"] != ZARRTRAJ_VERSION:
+        if self._file.attrs["version"] != ZARRTRAJ_VERSION:
             raise RuntimeError(
                 "ZarrTrajReader: Zarrtraj file version "
-                + f"{self.filename.attrs['version']} "
+                + f"{self._file.attrs['version']} "
                 + "is not compatible with reader version "
                 + f"{ZARRTRAJ_VERSION}"
             )
-
-        self._frame = -1
-        self._file = self.filename
         self._particle_group = self._file["particles"]
         self._step_array = self._particle_group["step"]
         self._time_array = self._particle_group["time"]
@@ -237,7 +241,7 @@ class ZarrTrajReader(base.ReaderBase):
             dset = self._particle_group[name]
             self.n_atoms = dset.shape[1]
             self.compressor = dset.compressor
-            # NOTE: add filters
+            self.filters = dset.filters
             break
         else:
             raise NoDataError(
@@ -265,6 +269,45 @@ class ZarrTrajReader(base.ReaderBase):
             "force": "kJ/(mol*nm)",
         }
         self._read_next_timestep()
+
+    def _protocol_import(self):
+        """Import the correct filesystem for the protocol"""
+        if "s3://" in self.filename:
+            try:
+                import s3fs
+            except ImportError:
+                raise ImportError(
+                    "ZarrTrajReader: Reading from AWS S3 requires installing s3fs"
+                )
+        elif "gcs://" in self.filename or "gs://" in self.filename:
+            try:
+                import gcsfs
+            except ImportError:
+                raise ImportError(
+                    "ZarrTrajReader: Reading from Google Cloud requires installing gcsfs"
+                )
+        elif "az://" in self.filename:
+            try:
+                import adlfs
+            except ImportError:
+                raise ImportError(
+                    "ZarrTrajReader: Reading from  Azure Blog Storage requires installing adlfs"
+                )
+
+    def _open_group(self):
+        """Open the Zarr group for reading"""
+        self._frame = -1
+        storage_options = (
+            dict() if self.storage_options is None else self.storage_options
+        )
+        store = zarr.storage.FSStore(
+            url=self.filename, mode="r", **storage_options
+        )
+
+        cache_wrapper = zarr.storage.LRUStoreCache(
+            store, max_size=self.cache_size
+        )
+        self._file = zarr.open_group(store=cache_wrapper, mode="r")
 
     def _verify_correct_units(self):
         self._unit_group = self._particle_group["units"]
@@ -382,18 +425,13 @@ class ZarrTrajReader(base.ReaderBase):
             self.convert_forces_from_native(self.ts.forces)
 
     @staticmethod
-    def _format_hint(thing):
-        """Can this Reader read *thing*"""
-        if not HAS_ZARR or not isinstance(thing, zarr.Group):
-            return False
-        else:
-            return True
-
-    @staticmethod
     def parse_n_atoms(filename, storage_options=None):
-        for group in filename["particles"]:
+        file = zarr.open_group(
+            filename, storage_options=storage_options, mode="r"
+        )
+        for group in file["particles"]:
             if group in ("positions", "velocities", "forces"):
-                n_atoms = filename[f"particles/{group}"].shape[1]
+                n_atoms = file[f"particles/{group}"].shape[1]
                 return n_atoms
 
         raise NoDataError(
@@ -405,12 +443,13 @@ class ZarrTrajReader(base.ReaderBase):
 
     def close(self):
         """Close reader"""
-        self._file.store.close()
+        if self._file is not None:
+            self._file.store.close()
 
     def _reopen(self):
         """reopen trajectory"""
         self.close()
-        self._frame = -1
+        self._open_group()
 
     @property
     def n_frames(self):
@@ -421,12 +460,14 @@ class ZarrTrajReader(base.ReaderBase):
         """Return writer for trajectory format"""
         if n_atoms is None:
             n_atoms = self.n_atoms
+        kwargs.setdefault("n_frames", self.n_frames)
         kwargs.setdefault("format", "ZARRTRAJ")
         kwargs.setdefault("compressor", self.compressor)
-        # NOTE: add filters
+        kwargs.setdefault("filters", self.filters)
         kwargs.setdefault("positions", self.has_positions)
         kwargs.setdefault("velocities", self.has_velocities)
         kwargs.setdefault("forces", self.has_forces)
+        kwargs.setdefault("storage_options", self.storage_options)
         return ZarrTrajWriter(filename, n_atoms, **kwargs)
 
     @property
@@ -465,7 +506,7 @@ class ZarrTrajWriter(base.WriterBase):
     Parameters
     ----------
     filename : :class:`zarr.Group`
-        Open, readable zarrtraj file
+       fsspec-style path to the Zarr group
     n_atoms : int
         number of atoms in trajectory
     n_frames : int (required for cloud and buffered writing)
@@ -484,6 +525,8 @@ class ZarrTrajWriter(base.WriterBase):
     filters : list (optional)
         list of ``numcodecs`` filter objects to be applied to
         to position, velocity, force, and observables datasets.
+    storage_options : dict (optional)
+        Additional options to pass to the storage backend
     positions : bool (optional)
         Write positions into the trajectory [``True``]
     velocities : bool (optional)
@@ -554,6 +597,7 @@ class ZarrTrajWriter(base.WriterBase):
         forces=True,
         compressor=None,
         filters=None,
+        storage_options=None,
         max_memory=None,
         force_buffered=False,
         author_email=None,
@@ -565,15 +609,17 @@ class ZarrTrajWriter(base.WriterBase):
 
         if not HAS_ZARR:
             raise RuntimeError("ZarrTrajWriter: Please install zarr")
+        self.filename = filename
+        self.storage_options = storage_options
+        self._open_group()
         # Verify group is open for writing
-        if not filename.store.is_writeable():
+        if not self._file.store.is_writeable():
             raise PermissionError(
                 "ZarrTrajWriter: The Zarr group is not writeable"
             )
         if n_atoms == 0:
             raise ValueError("ZarrTrajWriter: no atoms in output trajectory")
-        self.filename = filename
-        self._file = filename
+
         self.n_atoms = n_atoms
         self.n_frames = n_frames
         self.force_buffered = force_buffered
@@ -638,6 +684,12 @@ class ZarrTrajWriter(base.WriterBase):
             )
 
         self._initial_write = True
+
+    def _open_group(self):
+        """Open the Zarr group for writing"""
+        self._file = zarr.open_group(
+            self.filename, storage_options=self.storage_options, mode="a"
+        )
 
     def _determine_if_buffered_storage(self):
         # Check if we are working with a cloud storage type
@@ -833,7 +885,8 @@ class ZarrTrajWriter(base.WriterBase):
         self._particle_group.require_group("box")
         if self._boundary == ZarrTrajBoundaryConditions.ZARRTRAJ_PERIODIC:
             self._particle_group["box"].attrs["boundary"] = "periodic"
-            self._particle_group["box"]["dimensions"] = zarr.empty(
+            self._particle_group["box"].empty(
+                "dimensions",
                 shape=(self._first_dim, 3, 3),
                 dtype=np.float32,
                 compressor=self.compressor,
@@ -844,12 +897,12 @@ class ZarrTrajWriter(base.WriterBase):
             # boundary attr must be "none"
             self._particle_group["box"].attrs["boundary"] = "none"
 
-        self._particle_group["step"] = zarr.empty(
-            shape=(self._first_dim,), dtype=np.int32
+        self._particle_group.empty(
+            "step", shape=(self._first_dim,), dtype=np.int32
         )
         self._step = self._particle_group["step"]
-        self._particle_group["time"] = zarr.empty(
-            shape=(self._first_dim,), dtype=np.int32
+        self._particle_group.empty(
+            "time", shape=(self._first_dim,), dtype=np.float32
         )
         self._time = self._particle_group["time"]
 
@@ -870,14 +923,19 @@ class ZarrTrajWriter(base.WriterBase):
 
     def _create_observables_dataset(self, group, data):
         """helper function to initialize a dataset for each observable"""
-        self._obsv[group] = zarr.empty(
-            shape=(self._first_dim,) + data.shape, dtype=data.dtype
+        self._obsv.empty(
+            group,
+            shape=(self._first_dim,) + data.shape,
+            dtype=data.dtype,
+            filters=self.filters,
+            compressor=self.compressor,
         )
 
     def _create_trajectory_dataset(self, group):
         """helper function to initialize a dataset for
         position, velocity, and force"""
-        self._particle_group[group] = zarr.empty(
+        self._particle_group.empty(
+            group,
             shape=(self._first_dim, self.n_atoms, 3),
             dtype=np.float32,
             chunks=self.chunks,
@@ -1053,13 +1111,13 @@ class ZarrTrajWriter(base.WriterBase):
             self._step[i] = ts.data["step"]
         except KeyError:
             self._step[i] = ts.frame
-        if len(self._step) > 1 and self._step[i] < self._step[i - 1]:
+        if i > 0 and self._step[i] < self._step[i - 1]:
             raise ValueError(
                 "ZarrTrajWriter: The Zarrtraj standard dictates that the step "
                 "dataset must increase monotonically in value."
             )
         self._time[i] = self.convert_time_to_native(ts.time, inplace=False)
-        if len(self._time) > 1 and self._time[i] < self._time[i - 1]:
+        if i > 0 and self._time[i] < self._time[i - 1]:
             raise ValueError(
                 "ZarrTrajWriter: The Zarrtraj standard dictates that the time "
                 "dataset must increase monotonically in value."

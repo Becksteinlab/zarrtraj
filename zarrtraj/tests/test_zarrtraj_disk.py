@@ -43,14 +43,14 @@ class TestZarrTrajReaderBaseAPI(MultiframeReaderTest):
 
     def test_get_writer_1(self, ref, reader, tmpdir):
         with tmpdir.as_cwd():
-            outfile = zarr.open_group("test-writer" + ref.ext, "a")
+            outfile = "test-writer" + ref.ext
             with reader.Writer(outfile) as W:
                 assert_equal(isinstance(W, ref.writer), True)
                 assert_equal(W.n_atoms, reader.n_atoms)
 
     def test_get_writer_2(self, ref, reader, tmpdir):
         with tmpdir.as_cwd():
-            outfile = zarr.open_group("test-writer" + ref.ext, "a")
+            outfile = "test-writer" + ref.ext
             with reader.Writer(outfile, n_atoms=100) as W:
                 assert_equal(isinstance(W, ref.writer), True)
                 assert_equal(W.n_atoms, 100)
@@ -101,15 +101,12 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
         if ref.changing_dimensions:
             outfn = "write-dimensions-test" + ref.ext
             with tmpdir.as_cwd():
-                outfile = zarr.open_group(outfn, mode="a")
-                with ref.writer(
-                    outfile, universe.atoms.n_atoms, format="ZARRTRAJ"
-                ) as W:
+                with ref.writer(outfn, universe.atoms.n_atoms) as W:
                     for ts in universe.trajectory:
                         universe.dimensions[:3] += 1
                         W.write(universe)
 
-                written = ref.reader(outfile)
+                written = ref.reader(outfn)
 
                 for ts_ref, ts_w in zip(universe.trajectory, written):
                     universe.dimensions[:3] += 1
@@ -131,12 +128,11 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
         sel = universe.select_atoms(sel_str)
         outfn = "write-selection-test." + ref.ext
         with tmpdir.as_cwd():
-            outfile = zarr.open_group(outfn, mode="a")
-            with ref.writer(outfile, sel.n_atoms, format="ZARRTRAJ") as W:
+            with ref.writer(outfn, sel.n_atoms) as W:
                 for ts in universe.trajectory:
                     W.write(sel.atoms)
 
-            copy = ref.reader(outfile)
+            copy = ref.reader(outfn)
             for orig_ts, copy_ts in zip(universe.trajectory, copy):
                 assert_array_almost_equal(
                     copy_ts._pos,
@@ -151,41 +147,33 @@ class TestZarrTrajWriterBaseAPI(BaseWriterTest):
     def test_write_none(self, ref, tmpdir):
         outfn = "write-none." + ref.ext
         with tmpdir.as_cwd():
-            outfile = zarr.open_group(outfn, mode="a")
             with pytest.raises(TypeError):
-                with ref.writer(outfile, 42, format="ZARRTRAJ") as w:
+                with ref.writer(outfn, 42) as w:
                     w.write(None)
 
     def test_write_not_changing_ts(self, ref, universe, tmpdir):
         outfn = "write-not-changing-ts." + ref.ext
         copy_ts = universe.trajectory.ts.copy()
         with tmpdir.as_cwd():
-            outfile = zarr.open_group(outfn, mode="a")
-            with ref.writer(outfile, n_atoms=5, format="ZARRTRAJ") as W:
+            with ref.writer(outfn, n_atoms=5) as W:
                 W.write(universe)
                 assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
 
     def test_write_trajectory_atomgroup(self, ref, reader, universe, tmpdir):
         outfn = "write-atoms-test." + ref.ext
         with tmpdir.as_cwd():
-            outfile = zarr.open_group(outfn, mode="a")
-            with ref.writer(
-                outfile, universe.atoms.n_atoms, format="ZARRTRAJ"
-            ) as w:
+            with ref.writer(outfn, universe.atoms.n_atoms) as w:
                 for ts in universe.trajectory:
                     w.write(universe.atoms)
-            self._check_copy(outfile, ref, reader)
+            self._check_copy(outfn, ref, reader)
 
     def test_write_trajectory_universe(self, ref, reader, universe, tmpdir):
         outfn = "write-uni-test." + ref.ext
         with tmpdir.as_cwd():
-            outfile = zarr.open_group(outfn, mode="a")
-            with ref.writer(
-                outfile, universe.atoms.n_atoms, format="ZARRTRAJ"
-            ) as w:
+            with ref.writer(outfn, universe.atoms.n_atoms) as w:
                 for ts in universe.trajectory:
                     w.write(universe)
-            self._check_copy(outfile, ref, reader)
+            self._check_copy(outfn, ref, reader)
 
 
 # Parameterize all possible tests with force_buffered
@@ -197,20 +185,7 @@ class TestZarrTrajReaderWithRealTrajectory(object):
 
     @pytest.fixture()
     def universe(self):
-        return mda.Universe(TPR_xvf, zarr.open_group(ZARRTRAJ_xvf, mode="a"))
-
-    @pytest.fixture()
-    def ingroup(self):
-        return zarr.open_group(ZARRTRAJ_xvf, mode="a")
-
-    def ingroup_with_subselection(self, tmpdir):
-        file = str(tmpdir) + "zarrtraj-reader-test.zarrtraj"
-        return zarr.open_group(file, mode="a")
-
-    @pytest.fixture()
-    def outgroup(self, tmpdir):
-        file = str(tmpdir) + "zarrtraj-reader-test.zarrtraj"
-        return zarr.open_group(file, mode="a")
+        return mda.Universe(TPR_xvf, ZARRTRAJ_xvf)
 
     @pytest.fixture()
     def Reader(self):
@@ -221,19 +196,19 @@ class TestZarrTrajReaderWithRealTrajectory(object):
 class TestZarrTrajWriterWithRealTrajectory(object):
 
     prec = 3
+    ext = "zarrtraj"
 
     @pytest.fixture()
     def universe(self):
-        return mda.Universe(TPR_xvf, zarr.open_group(ZARRTRAJ_xvf, mode="a"))
+        return mda.Universe(TPR_xvf, ZARRTRAJ_xvf)
 
     @pytest.fixture()
     def Writer(self):
         return zarrtraj.ZARRTRAJ.ZarrTrajWriter
 
     @pytest.fixture()
-    def outgroup(self, tmpdir):
-        file = str(tmpdir) + "zarrtraj-writer-test.zarrtraj"
-        return zarr.open_group(file, mode="a")
+    def outfile(self, tmpdir):
+        yield str(tmpdir.join("zarrtraj-writer-test.zarrtraj." + self.ext))
 
     @pytest.mark.parametrize(
         "scalar, error, force_buffered, match",
@@ -267,43 +242,40 @@ class TestZarrTrajWriterWithRealTrajectory(object):
         ),
     )
     def test_n_atoms_errors(
-        self, universe, Writer, outgroup, scalar, error, force_buffered, match
+        self, universe, Writer, outfile, scalar, error, force_buffered, match
     ):
         n_atoms = universe.atoms.n_atoms * scalar
         with pytest.raises(error, match=match):
             with Writer(
-                outgroup,
+                outfile,
                 n_atoms,
                 n_frames=universe.trajectory.n_frames,
                 force_buffered=force_buffered,
-                format="ZARRTRAJ",
             ) as W:
                 W.write(universe)
 
-    def test_max_memory_too_low(self, Writer, universe, outgroup):
+    def test_max_memory_too_low(self, Writer, universe, outfile):
         with pytest.raises(ValueError, match="ZarrTrajWriter: `max_memory`"):
             with Writer(
-                outgroup,
+                outfile,
                 universe.atoms.n_atoms,
                 n_frames=universe.trajectory.n_frames,
                 chunks=(1, universe.trajectory.n_atoms, 3),
                 max_memory=get_frame_size(universe) - 1,
                 force_buffered=True,
-                format="ZARRTRAJ",
             ) as w:
                 for ts in universe.trajectory:
                     w.write(universe)
 
-    def test_max_memory_usage(self, Writer, universe, outgroup):
+    def test_max_memory_usage(self, Writer, universe, outfile):
         five_framesize = get_frame_size(universe) * 5
         with Writer(
-            outgroup,
+            outfile,
             universe.atoms.n_atoms,
             n_frames=universe.trajectory.n_frames,
             chunks=(5, universe.trajectory.n_atoms, 3),
             max_memory=five_framesize,
             force_buffered=True,
-            format="ZARRTRAJ",
         ) as w:
             for ts in universe.trajectory[:5]:
                 w.write(universe)

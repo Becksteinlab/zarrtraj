@@ -1,28 +1,106 @@
 from zarrtraj import *
+
 # from asv_runner.benchmarks.mark import skip_for_params
 from zarr.storage import DirectoryStore, LRUStoreCache
+import MDAnalysis.analysis.rms as rms
 
 import os
 
 BENCHMARK_DATA_DIR = os.getenv("BENCHMARK_DATA_DIR")
 
+os.environ["S3_REGION_NAME"] = "us-west-1"
+os.environ["AWS_PROFILE"] = "sample_profile"
+
+
 class TrajReaderDiskBenchmarks(object):
     """Benchmarks for zarrtraj file striding."""
-    # parameterize the input zarr group
-    # these zarr groups should vary on
-    # compression, filter_precision, chunk_frames
-    # reads should be parameterized based on LRU cache_size- size + presence
-    # cache_size sizes are 1, 10, 50, 98 (all) frames
-    params = ([0, 1, 9], ["all", 3], [1, 10, 50], [40136, 401360, 2006800, 3933328])
-    param_names = ['compressor_level', 'filter_precision', 'chunk_frames', 'cache_size']
 
-    def setup(self, compressor_level, filter_precision, chunk_frames, cache_size):
-        store = DirectoryStore(f"{BENCHMARK_DATA_DIR}/short_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj")
-        lruc = LRUStoreCache(store, max_size=cache_size)
-        self.traj_file = zarr.open_group(store=lruc, mode='r')
+    params = (
+        [0, 1, 9],
+        ["all", 3],
+        [1, 10, 50],
+    )
+    param_names = [
+        "compressor_level",
+        "filter_precision",
+        "chunk_frames",
+    ]
+
+    def setup(
+        self,
+        compressor_level,
+        filter_precision,
+        chunk_frames,
+    ):
+        self.traj_file = f"{BENCHMARK_DATA_DIR}/short_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
         self.reader_object = ZarrTrajReader(self.traj_file)
 
-    def time_strides(self, compressor_level, filter_precision, chunk_frames, cache_size):
+    def time_strides(
+        self,
+        compressor_level,
+        filter_precision,
+        chunk_frames,
+    ):
         """Benchmark striding over full trajectory"""
         for ts in self.reader_object:
             pass
+
+
+class TrajReaderAWSBenchmarks(object):
+    timeout = 86400
+    params = (
+        [0, 1, 9],
+        ["all", 3],
+        [10, 100],
+    )
+
+    param_names = [
+        "compressor_level",
+        "filter_precision",
+        "chunk_frames",
+    ]
+
+    def setup(self, compressor_level, filter_precision, chunk_frames):
+        self.traj_file = f"s3://zarrtraj-test-data/long_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
+        self.reader_object = ZarrTrajReader(
+            self.traj_file,
+        )
+        # self.universe = mda.Universe(
+        #    f"{BENCHMARK_DATA_DIR}/YiiP_system.pdb", self.traj_file
+        # )
+
+    def time_strides(self, compressor_level, filter_precision, chunk_frames):
+        """Benchmark striding over full trajectory"""
+        for ts in self.reader_object:
+            pass
+
+    # def time_RMSD(self, compressor_level, filter_precision, chunk_frames):
+    #    """Benchmark RMSF calculation"""
+    #    R = rms.RMSD(
+    #        self.universe,
+    #        self.universe,
+    #        select="backbone",
+    #        ref_frame=0,
+    #    ).run()
+
+
+class RawZarrReadBenchmarks(object):
+    timeout = 86400
+    params = (
+        [0, 1, 9],
+        ["all", 3],
+        [1, 10, 100],
+    )
+
+    param_names = [
+        "compressor_level",
+        "filter_precision",
+        "chunk_frames",
+    ]
+
+    def setup(self, compressor_level, filter_precision, chunk_frames):
+        self.traj_file = f"s3://zarrtraj-test-data/long_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
+        store = zarr.storage.FSStore(url=self.traj_file, mode="r")
+        # For consistency with zarrtraj defaults, use 256MB LRUCache store
+        cache = zarr.storage.LRUStoreCache(store, max_size=2**28)
+        self.zarr_group = zarr.open_group(store=cache, mode="r")

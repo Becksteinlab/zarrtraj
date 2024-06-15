@@ -21,13 +21,25 @@ Create a virtual environment and activate it::
 
 Build this package from source::
 
-    pip install -e .
+    pip install -e <path/to/repo>
 
 Development environment installation
 ------------------------------------
 
-Perform a normal conda installation as described, and then 
-install the development and documentation dependencies::
+After creating and activating a conda environment as described, install 
+the package with documentation and testing dependencies::
+
+    pip install -e <path/to/repo>[doc, test]
+
+Then, to install the development dependencies::
 
     conda env update --name zarrtraj --file devtools/conda-envs/test_env.yaml
+
+Or the documentation building dependencies::
+
     conda env update --name zarrtraj --file docs/requirements.yaml
+
+Or the benchmarking dependencies (this may have to be in a separate conda env
+depending on package version conflicts)::
+
+    conda env update --name zarrtraj --file devtools/conda-envs/asv_env.yaml

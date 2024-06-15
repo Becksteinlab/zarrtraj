@@ -1,0 +1,7 @@
+name: zarrtraj-benchmark
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - asv>=0.6.3
+
