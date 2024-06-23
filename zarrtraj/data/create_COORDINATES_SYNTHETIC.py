@@ -68,8 +68,10 @@ def create_COORDINATES_SYNTHETIC(uni, root):
     )
     pos.create_dataset("value", data=pos_data)
     pos["value"].attrs["unit"] = "Angstrom"
-    pos.create_dataset("step", data=step_data)
-    pos.create_dataset("time", data=time_data)
+    # in zarr, this will copy the array
+    # in hdf5, this creates a hard link (as dictated by the H5MD standard)
+    pos["step"] = dim["step"]
+    pos["time"] = dim["time"]
     pos["time"].attrs["unit"] = "ps"
 
     vel = pgroup.create_group("velocity")

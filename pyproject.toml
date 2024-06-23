@@ -23,6 +23,7 @@ dependencies = [
     "zarr>=2.11.0", 
     "dask>=2023.11.0",
     "kerchunk>=0.2.5",
+    # Can remove this dependency once kerchunk can handle links
     "h5py>=3.11.0",
 ]
 keywords = [

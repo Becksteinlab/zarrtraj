@@ -51,10 +51,24 @@ class H5MDElement:
                 if self.is_fixed():
                     if self._time.shape != ():
                         raise ValueError(
-                            f"Fixed step element {group.name} must have a fixed time"
+                            f"Fixed step element {group.name} must have fixed time"
                         )
                     self._converted_time = None
                     self._time_offset = self._time.attrs.get("offset", 0)
+
+                    if (
+                        self._time_offset != self._step_offset
+                        or self._time[()] != self._step[()]
+                    ):
+                        raise ValueError(
+                            "Fixed time and step datasets must have the same step length "
+                            f"and offset for element {group.name}"
+                        )
+                else:
+                    if self._time.shape != self._step.shape:
+                        raise ValueError(
+                            f"Time and step datasets must have the same shape for element {group.name}"
+                        )
 
     def is_fixed(self):
         return self._is_fixed
@@ -62,6 +76,7 @@ class H5MDElement:
     def is_time_independent(self):
         return self._is_time_independent
 
+    @property
     def has_time(self):
         return self._has_time
 
@@ -85,12 +100,16 @@ class H5MDElement:
         """Return the step dataset as an np.array if the element
         is fixed, otherwise return the step array as a zarr array
         """
-        if not self.has_time():
-            return None
+        if not self.has_time:
+            raise ValueError("Element does not have a time dataset")
         if self.is_time_independent():
             raise ValueError("Element is time-independent")
         if self._is_fixed:
-            return fixed_to_explicit(self._time, self._time_offset)
+            if self._converted_time is None:
+                self._converted_time = fixed_to_explicit(
+                    len(self.value), self._time[()], self._time_offset
+                )
+            return self._converted_time
         return self._time
 
     @property
@@ -99,7 +118,7 @@ class H5MDElement:
 
     @property
     def timeunit(self):
-        if not self.has_time():
+        if not self.has_time:
             raise ValueError("Element does not have a time dataset")
         if self.is_time_independent():
             raise ValueError("Element is time-independent")
