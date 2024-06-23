@@ -152,7 +152,7 @@ def get_h5_zarr_mapping(
 
 
 def get_mapping_for(filename, protocol, ext, so):
-    if ext == ".zarr":
+    if ext == ".zarr" or ext == ".zarrmd":
         mapping = zarr.storage.FSStore(filename, mode="r", **so)
     elif ext == ".h5md" or ext == ".h5":
         mapping = get_h5_zarr_mapping(filename, protocol, so)

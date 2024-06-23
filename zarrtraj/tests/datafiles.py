@@ -9,8 +9,8 @@ Use as ::
 """
 
 __all__ = [
-    "COORDINATES_ZARRTRAJ",  # synthetic traj from create_zarrtraj_data.py
-    "ZARRTRAJ_xvf",  # real traj created with create_ZARRTRAJ_xvf.py
+    "COORDINATES_SYNTHETIC_H5MD",
+    "COORDINATES_SYNTHETIC_ZARRMD",
 ]
 
 from importlib import resources
@@ -18,7 +18,11 @@ from pathlib import Path
 
 _data_ref = resources.files("zarrtraj.data")
 
-COORDINATES_ZARRTRAJ = (_data_ref / "test.zarrtraj").as_posix()
-ZARRTRAJ_xvf = (_data_ref / "cobrotoxin.zarrtraj").as_posix()
+COORDINATES_SYNTHETIC_H5MD = (
+    _data_ref / "COORDINATES_SYNTHETIC_H5MD.h5md"
+).as_posix()
+COORDINATES_SYNTHETIC_ZARRMD = (
+    _data_ref / "COORDINATES_SYNTHETIC_ZARRMD.zarrmd"
+).as_posix()
 
 del resources

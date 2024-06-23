@@ -1,0 +1,8 @@
+{
+    "boundary": [
+        "periodic",
+        "periodic",
+        "periodic"
+    ],
+    "dimension": 3
+}

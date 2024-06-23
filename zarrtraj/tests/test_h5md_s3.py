@@ -19,7 +19,10 @@ from MDAnalysisTests.datafiles import (
     TPR_xvf,
     TRR_xvf,
     COORDINATES_TOPOLOGY,
-    COORDINATES_H5MD,
+)
+from zarrtraj.tests.datafiles import (
+    COORDINATES_SYNTHETIC_H5MD,
+    COORDINATES_SYNTHETIC_ZARRMD,
 )
 
 
@@ -49,12 +52,12 @@ def upload_zarrmd_testfile(file_name):
     return True
 
 
-class H5MDReference(BaseReference):
+class H5MDFmtReference(BaseReference):
     """Reference synthetic trajectory that was
     copied from test_xdr.TRRReference"""
 
     def __init__(self, filename):
-        super(H5MDReference, self).__init__()
+        super(H5MDFmtReference, self).__init__()
         self.trajectory = filename
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZARRH5MDReader
@@ -85,20 +88,6 @@ class H5MDReference(BaseReference):
         return ts
 
 
-# @pytest.fixture(scope="class")
-# def localref():
-#     yield H5MDReference(COORDINATES_H5MD)
-#
-#
-# @pytest.fixture(scope="class")
-# def s3ref():
-#     upload_h5md_testfile(COORDINATES_H5MD)
-#     s3ref = H5MDReference(
-#         "s3://zarrtraj-test-data" + os.path.basename(COORDINATES_H5MD)
-#     )
-#     yield s3ref
-
-
 @pytest.fixture(scope="class")
 def ref(request):
     store, filename = request.param
@@ -108,20 +97,32 @@ def ref(request):
         elif filename.endswith(".zarrmd"):
             upload_zarrmd_testfile(filename)
         s3fn = "s3://zarrtraj-test-data/" + os.path.basename(filename)
-        yield H5MDReference(s3fn)
+        yield H5MDFmtReference(s3fn)
     else:
-        yield H5MDReference(filename)
+        yield H5MDFmtReference(filename)
 
 
 @pytest.mark.parametrize(
     "ref",
     [
-        ("s3", COORDINATES_H5MD),
-        ("local", COORDINATES_H5MD),
-        # ("s3", COORDINATES_ZARRMD),
-        # ("local", COORDINATES_ZARRMD),
+        ("s3", COORDINATES_SYNTHETIC_H5MD),
+        ("local", COORDINATES_SYNTHETIC_H5MD),
+        ("s3", COORDINATES_SYNTHETIC_ZARRMD),
+        ("local", COORDINATES_SYNTHETIC_ZARRMD),
     ],
     indirect=True,
 )
-class TestS3H5MDReaderBaseAPI(MultiframeReaderTest):
+class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
+
+
+# H5MD Format Reader Tests
+# Only test these with disk to avoid excessive test length
+# @pytest.mark.parametrize(
+#    "file",
+#    [COORDINATES_MISSING_H5MD_GRP_H5MD, COORDINATES_MISSING_H5MD_GRP_ZARRMD],
+# )
+# class TestH5MDFmtReaderMissingH5MDGrp:
+#    def test_missing_h5md_grp(self, file):
+#        with pytest.raises(ValueError):
+#            zarrtraj.ZARRH5MDReader(file)
