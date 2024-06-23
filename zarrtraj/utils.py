@@ -129,7 +129,7 @@ def get_h5_zarr_mapping(
 
     with fsspec.open(url, **so) as inf:
         h5chunks = SingleHdf5ToZarrPatched(inf, url, inline_threshold=100)
-        fo = h5chunks.translate(preserve_links=True)
+        fo = h5chunks.translate(preserve_linked_dsets=True)
 
     if protocol == "s3":
         fs = fsspec.filesystem(

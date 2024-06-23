@@ -125,6 +125,8 @@ class ZARRH5MDReader(base.ReaderBase):
         # Set to none so close() can be called
         self._file = None
         self._cache = None
+        # Read first timestep
+        self._frame_seq = collections.deque([0])
         if not HAS_ZARR:
             raise RuntimeError("Please install zarr")
         super(ZARRH5MDReader, self).__init__(filename, **kwargs)
@@ -132,7 +134,6 @@ class ZARRH5MDReader(base.ReaderBase):
         self.convert_units = convert_units
         self._cache_size = cache_size
         so = storage_options if storage_options is not None else {}
-        self._frame_seq = None
 
         self._determine_protocol()
         self._mapping = get_mapping_for(
@@ -198,14 +199,14 @@ class ZARRH5MDReader(base.ReaderBase):
             self._global_steparray,
             self._stepmap,
         )
-
-        self._cache.load_first_frame()
+        self._cache.update_frame_seq(self._frame_seq)
+        self._read_next_timestep()
 
     def _set_translated_units(self):
         """converts units from H5MD to MDAnalysis notation
         and fills units dictionary"""
 
-        self.units = collections.defaultdict(lambda: None)
+        self.units = collections.defaultdict(type(None))
 
         # Datasets are self-describing, so units must be provided for each
         # additionally, all time units must be the same and box/edges
@@ -386,24 +387,25 @@ class ZARRH5MDReader(base.ReaderBase):
 
     def _read_next_timestep(self):
         """read next frame in trajectory"""
-        if self._frame_seq is None:
-            self._frame_seq = collections.deque(range(self.n_frames))
-            print(self._frame_seq)
-
-        if self._frame == -1:
-            self._cache.update_frame_seq(self._frame_seq)
-            self._cache.update_desired_dsets(
-                self._elements, self._global_steparray, self._stepmap
-            )
+        # if len(self._frame_seq) == 0 and self._frame == -1:
+        #    self._frame_seq = collections.deque(range(0, self.n_frames))
+        # if self._frame == -1:
+        #    # If loading first frame or rewinding, inform cache
+        #    # we want first frame
+        #    # If iterating normally, inform cache of sequence as well
+        #    self._cache.update_frame_seq(self._frame_seq)
 
         return self._read_frame(self._frame + 1)
 
     def _read_frame(self, frame):
         """reads data from h5md file and copies to current timestep"""
+        # frame seq update case 1: read called from iterator-like context
         if not self._frame_seq:
+            self._frame_seq = None
+            self._cache.update_frame_seq(self._frame_seq)
             raise StopIteration
 
-        self._cache.load_frame()
+        self._frame = self._cache.load_frame()
 
         if self.ts.time == -1.0:
             raise ValueError(
@@ -413,6 +415,11 @@ class ZARRH5MDReader(base.ReaderBase):
 
         if self.convert_units:
             self._convert_units()
+
+        # frame seq update case 1: read called from __getitem__-like context
+        if len(self._frame_seq) == 0:
+            self._frame_seq = None
+            self._cache.update_frame_seq(self._frame_seq)
 
         return self.ts
 
@@ -439,6 +446,8 @@ class ZARRH5MDReader(base.ReaderBase):
 
     def close(self):
         """close reader"""
+        self._frame_seq = None
+        print("Closing the reader")
         if self._cache is not None:
             self._cache.cleanup()
         if self._file is not None:
@@ -520,6 +529,7 @@ class ZARRH5MDReader(base.ReaderBase):
             frame = self._apply_limits(frame)
             if self._frame_seq is None:
                 self._frame_seq = collections.deque([frame])
+                self._cache.update_frame_seq(self._frame_seq)
             return self._read_frame_with_aux(frame)
         elif isinstance(frame, (list, np.ndarray)):
             if len(frame) != 0 and isinstance(frame[0], (bool, np.bool_)):
@@ -531,7 +541,7 @@ class ZARRH5MDReader(base.ReaderBase):
                 frame = frame.tolist()
             if self._frame_seq is None:
                 self._frame_seq = collections.deque(frame)
-                print(self._frame_seq)
+                self._cache.update_frame_seq(self._frame_seq)
             return base.FrameIteratorIndices(self, frame)
         elif isinstance(frame, slice):
             start, stop, step = self.check_slice_indices(
@@ -539,7 +549,7 @@ class ZARRH5MDReader(base.ReaderBase):
             )
             if self._frame_seq is None:
                 self._frame_seq = collections.deque(range(start, stop, step))
-                print(self._frame_seq)
+                self._cache.update_frame_seq(self._frame_seq)
             if start == 0 and stop == len(self) and step == 1:
                 return base.FrameIteratorAll(self)
             else:
@@ -549,6 +559,77 @@ class ZARRH5MDReader(base.ReaderBase):
                 "Trajectories must be an indexed using an integer,"
                 " slice or list of indices"
             )
+
+    def __iter__(self):
+        """Iterate over all frames in the trajectory"""
+        self._reopen()
+        self._frame_seq = collections.deque(range(0, self.n_frames))
+        self._cache.update_frame_seq(self._frame_seq)
+        return self
+
+    def next(self):
+        if self._frame_seq is None and self._frame + 1 < self.n_frames:
+            self._frame_seq = collections.deque([self._frame + 1])
+            self._cache.update_frame_seq(self._frame_seq)
+        elif self._frame_seq is None:
+            self.rewind()
+            raise StopIteration from None
+        try:
+            ts = self._read_next_timestep()
+        except (EOFError, IOError):
+            self.rewind()
+            raise StopIteration from None
+        else:
+            for auxname, reader in self._auxs.items():
+                ts = self._auxs[auxname].update_ts(ts)
+
+            ts = self._apply_transformations(ts)
+
+        return ts
+
+    def iter_as_aux(self, auxname):
+        """Iterate over the trajectory with an auxiliary reader"""
+        aux = self._check_for_aux(auxname)
+        self._reopen()
+        self._frame_seq = collections.deque(range(0, self.n_frames))
+        self._cache.update_frame_seq(self._frame_seq)
+        aux._restart()
+        while True:
+            try:
+                yield self.next_as_aux(auxname)
+            except StopIteration:
+                return
+
+    def copy(self):
+        """Return independent copy of this Reader.
+
+        New Reader will have its own file handle and can seek/iterate
+        independently of the original.
+
+        Will also copy the current state of the Timestep held in the original
+        Reader.
+
+
+        .. versionchanged:: 2.2.0
+           Arguments used to construct the reader are correctly captured and
+           passed to the creation of the new class. Previously the only
+           ``n_atoms`` was passed to class copies, leading to a class created
+           with default parameters which may differ from the original class.
+        """
+
+        new = self.__class__(**self._kwargs)
+
+        if self.transformations:
+            new.add_transformations(*self.transformations)
+        # seek the new reader to the same frame we started with
+        new[self.ts.frame]
+        # then copy over the current Timestep in case it has
+        # been modified since initial load
+        new.ts = self.ts.copy()
+        new._cache._timestep = new.ts
+        for auxname, auxread in self._auxs.items():
+            new.add_auxiliary(auxname, auxread.copy())
+        return new
 
     @property
     def n_frames(self):
@@ -593,7 +674,7 @@ class ZARRH5MDReader(base.ReaderBase):
         )
 
 
-class H5MDWriter(base.WriterBase):  #
+class H5MDWriter(base.WriterBase):
     """Writer for `H5MD`_ format (version 1.1).
 
     H5MD trajectories are automatically recognised by the
@@ -1320,12 +1401,11 @@ class ZarrNoCache(FrameCache):
         self._global_steparray = global_steparray
         self._stepmap = stepmap
 
-    def load_first_frame(self):
-        self._load_timestep_frame(0)
-
     def load_frame(self):
         """Reader responsbile for raising StopIteration when no more frames"""
-        self._load_timestep_frame(self._frame_seq.popleft())
+        frame = self._frame_seq.popleft()
+        self._load_timestep_frame(frame)
+        return frame
 
     def _load_timestep_frame(self, frame):
         # Reader must handle unit conversions
@@ -1434,12 +1514,11 @@ class ZarrLRUCache(FrameCache):
         self._global_steparray = global_steparray
         self._stepmap = stepmap
 
-    def load_first_frame(self):
-        self._load_timestep_frame(0)
-
     def load_frame(self):
         """Reader responsbile for raising StopIteration when no more frames"""
-        self._load_timestep_frame(self._frame_seq.popleft())
+        frame = self._frame_seq.popleft()
+        self._load_timestep_frame(frame)
+        return frame
 
     def _load_timestep_frame(self, frame):
         # Reader must handle unit conversions

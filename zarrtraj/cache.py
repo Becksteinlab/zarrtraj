@@ -41,14 +41,6 @@ class FrameCache(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def load_first_frame(self, *args, **kwargs):
-        """Call this in the cache's init method
-        to ensure the reader's 'reading head'
-        is initialized to the first timestep
-        """
-        pass
-
-    @abc.abstractmethod
     def cleanup(self, *args, **kwargs):
         """Call this in the reader's close() method"""
         pass

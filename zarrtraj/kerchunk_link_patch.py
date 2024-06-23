@@ -20,7 +20,7 @@ lggr = logging.getLogger("h5-to-zarr")
 
 
 class SingleHdf5ToZarrPatched(hdf.SingleHdf5ToZarr):
-    def translate(self, preserve_links=False):
+    def translate(self, preserve_linked_dsets=False):
         """Translate content of one HDF5 file into Zarr storage format.
 
         This method is the main entry point to execute the workflow, and
@@ -42,11 +42,9 @@ class SingleHdf5ToZarrPatched(hdf.SingleHdf5ToZarr):
         lggr.debug("Translation begins")
         self._transfer_attrs(self._h5f, self._zroot)
 
-        self._preserve_links = preserve_links
-        if self._preserve_links:
+        self._h5f.visititems(self._translator)
+        if preserve_linked_dsets:
             self._h5f.visititems_links(self._translator)
-        else:
-            self._h5f.visititems(self._translator)
         if self.spec < 1:
             return self.store
         elif isinstance(self.store, LazyReferenceMapper):
@@ -75,6 +73,12 @@ class SingleHdf5ToZarrPatched(hdf.SingleHdf5ToZarr):
                 h5obj, h5py.HardLink
             ):
                 h5obj = self._h5f[name]
+                # don't copy linked groups- if they contain datasets, these
+                # won't be copied since visititems_links is only called once 
+                # per group/dset, meaning copying groups would result in empty groups
+                if isinstance(h5obj, h5py.Group):
+                    # continues iteration
+                    return None
 
             if isinstance(h5obj, h5py.Dataset):
                 lggr.debug(f"HDF5 dataset: {h5obj.name}")
@@ -271,7 +275,7 @@ class SingleHdf5ToZarrPatched(hdf.SingleHdf5ToZarr):
                         )
 
                 # Create a Zarr array equivalent to this HDF5 dataset...
-                za = self._zroot.create_dataset(
+                za = self._zroot.require_dataset(
                     h5obj.name,
                     shape=h5obj.shape,
                     dtype=dt or h5obj.dtype,
@@ -319,7 +323,7 @@ class SingleHdf5ToZarrPatched(hdf.SingleHdf5ToZarr):
 
             elif isinstance(h5obj, h5py.Group):
                 lggr.debug(f"HDF5 group: {h5obj.name}")
-                zgrp = self._zroot.create_group(h5obj.name)
+                zgrp = self._zroot.require_group(h5obj.name)
                 self._transfer_attrs(h5obj, zgrp)
         except Exception as e:
             import traceback
