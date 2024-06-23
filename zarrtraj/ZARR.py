@@ -1,3 +1,52 @@
+"""
+
+Example: Loading a .zarrmd file from disk
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To load a ZarrTraj simulation from a .zarrmd trajectory file, pass a
+topology file and a path to the .zarrmd file to a
+:class:`~MDAnalysis.core.universe.Universe`::
+
+    import zarrtraj
+    import MDAnalysis as mda
+    u = mda.Universe("topology.tpr", "trajectory.zarrmd")
+
+Example: Reading from cloud services
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Zarrtraj currently supports reading from .h5md and .zarrmd files stored in
+AWS, Google Cloud, and Azure Block Storage.
+
+To read from AWS S3, pass the s3 url path to the file as a trajectory::
+
+    import zarrtraj
+    import MDAnalysis as mda
+    import os
+
+    # Using environmental variables is a convenient way
+    # to manage AWS credentials
+    os.environ["AWS_PROFILE"] = "sample_profile"
+    os.environ["AWS_REGION"] = "us-west-1"
+
+    u = mda.Universe("topology.tpr", "s3://zarrtraj-test-data/trajectory.zarrmd")
+
+AWS provides a VSCode extension to manage AWS authentication profiles
+`here <https://aws.amazon.com/visualstudiocode/>`_.
+
+.. warning::
+
+    Zarrtraj is not optimized for reading trajectories 
+    in the cloud with random-access patterns. Iterate 
+    sequentially for best performance.
+
+Classes
+^^^^^^^
+
+.. autoclass:: ZARRH5MDReader
+   :members:
+   :inherited-members:
+"""
+
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.coordinates import base, core
