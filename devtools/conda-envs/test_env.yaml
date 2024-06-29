@@ -4,12 +4,14 @@ channels:
   - conda-forge
 dependencies:
   ### Base depends ###
-  - python>=3.9
+  - python>=3.10.0
   - pip
 
   ### Core requirements ###
   - MDAnalysis>=2.7.0
   - zarr>=2.11.0
+  - kerchunk>=0.2.5
+  - h5py>=3.11.0
   - dask
 
   ### AWS dependencies ###

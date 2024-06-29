@@ -16,13 +16,15 @@ maintainers = [
     {name = "Lawson Woods", email = "ljwoods2@asu.edu"},
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10.0"
 dependencies = [
     "MDAnalysis>=2.7.0",
     # Earliest zarr version where BaseStore has close() method
     "zarr>=2.11.0", 
     "dask>=2023.11.0",
-    
+    "kerchunk>=0.2.5",
+    # Can remove this dependency once kerchunk can handle links
+    "h5py>=3.11.0",
 ]
 keywords = [
     "molecular simulations",
