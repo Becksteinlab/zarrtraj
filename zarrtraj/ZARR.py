@@ -742,184 +742,9 @@ class ZARRH5MDReader(base.ReaderBase):
         )
 
 
-class H5MDWriter(base.WriterBase):
-    """Writer for `H5MD`_ format (version 1.1).
-
-    H5MD trajectories are automatically recognised by the
-    file extension ".h5md".
-
-    All data from the input :class:`~MDAnalysis.coordinates.timestep.Timestep` is
-    written by default. For detailed information on how :class:`H5MDWriter`
-    handles units, compression, and chunking, see the Notes section below.
-
-    Note
-    ----
-    Parellel writing with the use of a MPI communicator and the ``'mpio'``
-    HDF5 driver is currently not supported.
-
-    Note
-    ----
-    :exc:`NoDataError` is raised if no positions, velocities, or forces are
-    found in the input trajectory. While the H5MD standard allows for this
-    case, :class:`H5MDReader` cannot currently read files without at least
-    one of these three groups.
-
-    Note
-    ----
-    Writing H5MD files with fancy trajectory slicing where the Timestep
-    does not increase monotonically such as ``u.trajectory[[2,1,0]]``
-    or ``u.trajectory[[0,1,2,0,1,2]]`` raises a :exc:`ValueError` as this
-    violates the rules of the step dataset in the H5MD standard.
-
-    Parameters
-    ----------
-    filename : str or :class:`h5py.File`
-        trajectory filename or open h5py file
-    n_atoms : int
-        number of atoms in trajectory
-    n_frames : int (optional)
-        number of frames to be written in trajectory
-    driver : str (optional)
-        H5PY file driver used to open H5MD file. See `H5PY drivers`_ for
-        list of available drivers.
-    convert_units : bool (optional)
-        Convert units from MDAnalysis to desired units
-    chunks : tuple (optional)
-        Custom chunk layout to be applied to the position,
-        velocity, and force datasets. By default, these datasets
-        are chunked in ``(1, n_atoms, 3)`` blocks
-    compression : str or int (optional)
-        HDF5 dataset compression setting to be applied
-        to position, velocity, and force datasets. Allowed
-        settings are 'gzip', 'szip', 'lzf'. If an integer
-        in range(10), this indicates gzip compression level.
-        Otherwise, an integer indicates the number of a
-        dynamically loaded compression filter.
-    compression_opts : int or tup (optional)
-        Compression settings.  This is an integer for gzip, 2-tuple for
-        szip, etc. If specifying a dynamically loaded compression filter
-        number, this must be a tuple of values. For gzip, 1 indicates
-        the lowest level of compression and 9 indicates maximum compression.
-    positions : bool (optional)
-        Write positions into the trajectory [``True``]
-    velocities : bool (optional)
-        Write velocities into the trajectory [``True``]
-    forces : bool (optional)
-        Write forces into the trajectory [``True``]
-    timeunit : str (optional)
-        Option to convert values in the 'time' dataset to a custom unit,
-        must be recognizable by MDAnalysis
-    lengthunit : str (optional)
-        Option to convert values in the 'position/value' dataset to a
-        custom unit, must be recognizable by MDAnalysis
-    velocityunit : str (optional)
-        Option to convert values in the 'velocity/value' dataset to a
-        custom unit, must be recognizable by MDAnalysis
-    forceunit : str (optional)
-        Option to convert values in the 'force/value' dataset to a
-        custom unit, must be recognizable by MDAnalysis
-    author : str (optional)
-        Name of the author of the file
-    author_email : str (optional)
-        Email of the author of the file
-    creator : str (optional)
-        Software that wrote the file [``MDAnalysis``]
-    creator_version : str (optional)
-        Version of software that wrote the file
-        [:attr:`MDAnalysis.__version__`]
-
-    Raises
-    ------
-    RuntimeError
-        when `H5PY`_ is not installed
-    ValueError
-        when `n_atoms` is 0
-    ValueError
-        when ``chunks=False`` but the user did not specify `n_frames`
-    ValueError
-        when `positions`, `velocities`, and `forces` are all
-        set to ``False``
-    TypeError
-        when the input object is not a :class:`Universe` or
-        :class:`AtomGroup`
-    IOError
-        when `n_atoms` of the :class:`Universe` or :class:`AtomGroup`
-        being written does not match `n_atoms` passed as an argument
-        to the writer
-    ValueError
-        when any of the optional `timeunit`, `lengthunit`,
-        `velocityunit`, or `forceunit` keyword arguments are
-        not recognized by MDAnalysis
-
-    Notes
-    -----
-
-    By default, the writer will write all available data (positions,
-    velocities, and forces) if detected in the input
-    :class:`~MDAnalysis.coordinates.timestep.Timestep`. In addition, the settings
-    for `compression` and `compression_opts` will be read from
-    the first available group of positions, velocities, or forces and used as
-    the default value. To write a file without any one of these datsets,
-    set `positions`, `velocities`, or `forces` to ``False``.
-
-    .. rubric:: Units
-
-    The H5MD format is very flexible with regards to units, as there is no
-    standard defined unit for the format. For this reason, :class:`H5MDWriter`
-    does not enforce any units. The units of the written trajectory can be set
-    explicitly with the keyword arguments `lengthunit`, `velocityunit`,
-    and `forceunit`. If units are not explicitly specified, they are set to
-    the native units of the trajectory that is the source of the coordinates.
-    For example, if one converts a DCD trajectory, then positions are written
-    in ångstrom and time in AKMA units. A GROMACS XTC will be written in nm and
-    ps. The units are stored in the metadata of the H5MD file so when
-    MDAnalysis loads the H5MD trajectory, the units will be automatically
-    set correctly.
-
-    .. rubric:: Compression
-
-    HDF5 natively supports various compression modes. To write the trajectory
-    with compressed datasets, set ``compression='gzip'``, ``compression='lzf'``
-    , etc. See `H5PY compression options`_ for all supported modes of
-    compression. An additional argument, `compression_opts`, can be used to
-    fine tune the level of compression. For example, for GZIP compression,
-    `compression_opts` can be set to 1 for minimum compression and 9 for
-    maximum compression.
-
-    .. rubric:: HDF5 Chunking
-
-    HDF5 datasets can be *chunked*, meaning the dataset can be split into equal
-    sized pieces and stored in different, noncontiguous places on disk.
-    If HDF5 tries to read an element from a chunked dataset, the *entire*
-    dataset must be read, therefore an ill-thought-out chunking scheme can
-    drastically effect file I/O performance. In the case of all MDAnalysis
-    writers, in general, the number of frames being written is not known
-    apriori by the writer, therefore the HDF5 must be extendable. However, the
-    allocation of diskspace is defined when the dataset is created, therefore
-    extendable HDF5 datasets *must* be chunked so as to allow dynamic storage
-    on disk of any incoming data to the writer. In such cases where chunking
-    isn't explicity defined by the user, H5PY automatically selects a chunk
-    shape via an algorithm that attempts to make mostly square chunks between
-    1 KiB - 1 MiB, however this can lead to suboptimal I/O performance.
-    :class:`H5MDWriter` uses a default chunk shape of ``(1, n_atoms, 3)`` so
-    as to mimic the typical access pattern of a trajectory by MDAnalysis. In
-    our tests ([Jakupovic2021]_), this chunk shape led to a speedup on the
-    order of 10x versus H5PY's auto-chunked shape. Users can set a custom
-    chunk shape with the `chunks` argument. Additionaly, the datasets in a
-    file can be written with a contiguous layout by setting ``chunks=False``,
-    however this must be accompanied by setting `n_frames` equal to the
-    number of frames being written, as HDF5 must know how much space to
-    allocate on disk when creating the dataset.
-
-    .. _`H5PY compression options`: https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
-    .. _`H5PY drivers`: https://docs.h5py.org/en/stable/high/file.html#file-drivers
-
-
-    .. versionadded:: 2.0.0
-
-    """
-
-    format = "H5MD"
+class ZARRMDWriter(base.WriterBase):
+   
+    format = "ZARRMD"
     multiframe = True
     #: These variables are not written from :attr:`Timestep.data`
     #: dictionary to the observables group in the H5MD file
@@ -987,11 +812,10 @@ class H5MDWriter(base.WriterBase):
         filename,
         n_atoms,
         n_frames=None,
-        driver=None,
+
         convert_units=True,
         chunks=None,
-        compression=None,
-        compression_opts=None,
+
         positions=True,
         velocities=True,
         forces=True,
@@ -1006,17 +830,11 @@ class H5MDWriter(base.WriterBase):
         **kwargs,
     ):
 
-        if not HAS_H5PY:
-            raise RuntimeError("H5MDWriter: Please install h5py")
         self.filename = filename
         if n_atoms == 0:
             raise ValueError("H5MDWriter: no atoms in output trajectory")
         self._driver = driver
-        if self._driver == "mpio":
-            raise ValueError(
-                "H5MDWriter: parallel writing with MPI I/O "
-                "is not currently supported."
-            )
+
         self.n_atoms = n_atoms
         self.n_frames = n_frames
         self.chunks = (1, n_atoms, 3) if chunks is None else chunks
@@ -1025,11 +843,9 @@ class H5MDWriter(base.WriterBase):
                 "H5MDWriter must know how many frames will be "
                 "written if ``chunks=False``."
             )
-        self.contiguous = self.chunks is False and self.n_frames is not None
-        self.compression = compression
-        self.compression_opts = compression_opts
+
         self.convert_units = convert_units
-        self.h5md_file = None
+        self._file = None
 
         # The writer defaults to writing all data from the parent Timestep if
         # it exists. If these are True, the writer will check each
