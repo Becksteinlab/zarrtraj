@@ -82,3 +82,25 @@ class TrajReaderAWSBenchmarks(object):
     #        select="backbone",
     #        ref_frame=0,
     #    ).run()
+
+
+class RawZarrReadBenchmarks(object):
+    timeout = 86400
+    params = (
+        [0, 1, 9],
+        ["all", 3],
+        [1, 10, 100],
+    )
+
+    param_names = [
+        "compressor_level",
+        "filter_precision",
+        "chunk_frames",
+    ]
+
+    def setup(self, compressor_level, filter_precision, chunk_frames):
+        self.traj_file = f"s3://zarrtraj-test-data/long_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
+        store = zarr.storage.FSStore(url=self.traj_file, mode="r")
+        # For consistency with zarrtraj defaults, use 256MB LRUCache store
+        cache = zarr.storage.LRUStoreCache(store, max_size=2**28)
+        self.zarr_group = zarr.open_group(store=cache, mode="r")
