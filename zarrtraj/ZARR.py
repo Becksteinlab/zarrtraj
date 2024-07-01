@@ -207,7 +207,7 @@ class ZARRH5MDReader(base.ReaderBase):
                 and name in ("position", "velocity", "force", "box/edges")
             ]
         )
-        self.n_frames = len(self._global_steparray)
+        self._n_frames = len(self._global_steparray)
 
         self._stepmaps = create_stepmap(
             self._elements,
@@ -714,7 +714,7 @@ class ZARRH5MDReader(base.ReaderBase):
     @property
     def n_frames(self):
         """number of frames in trajectory"""
-        return self.n_frames
+        return self._n_frames
 
     @staticmethod
     def _format_hint(thing):
@@ -1316,7 +1316,7 @@ class ZARRMDWriter(base.WriterBase):
                 elembuffer.flush()
                 # To ensure idempotency:
                 self._elements = dict()
-        if self._file is not None:
+        if hasattr(self, "_file") and self._file is not None:
             self._file.store.close()
             self._file = None
 
