@@ -55,7 +55,7 @@ def upload_zarrmd_testfile(file_name):
         root=f"s3://zarrtraj-test-data/{obj_name}", s3=s3_fs
     )
 
-    zarr.convenience.copy_store(source.store, cloud_store, if_exists="replace")
+    zarr.convenience.copy_store(source.store, cloud_store, if_exists="raise")
 
     return True
 
