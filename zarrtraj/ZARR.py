@@ -574,7 +574,6 @@ class ZARRH5MDReader(base.ReaderBase):
             n_atoms = self.n_atoms
         kwargs.setdefault("compressor", self.compressor)
         kwargs.setdefault("filters", self.filters)
-        kwargs.setdefault("chunks", self.chunks)
         kwargs.setdefault("positions", ("position" in self._elements))
         kwargs.setdefault("velocities", ("velocity" in self._elements))
         kwargs.setdefault("forces", ("force" in self._elements))
@@ -1160,59 +1159,6 @@ class ZARRMDWriter(base.WriterBase):
                 self._set_attr_unit(self._time, "time")
                 break
 
-    def _create_trajectory_dataset(self, group):
-        """helper function to initialize a dataset for
-        position, velocity, and force"""
-
-        if self.n_frames is None:
-            shape = (0, self.n_atoms, 3)
-            maxshape = (None, self.n_atoms, 3)
-        else:
-            shape = (self.n_frames, self.n_atoms, 3)
-            maxshape = None
-
-        chunks = None if self.contiguous else self.chunks
-
-        self._traj.require_group(group)
-        self._traj.require_dataset(
-            f"{group}/value",
-            shape=shape,
-            maxshape=maxshape,
-            dtype=np.float32,
-            chunks=chunks,
-            compression=self.compression,
-            compression_opts=self.compression_opts,
-        )
-        if "step" not in self._traj[group]:
-            self._traj[f"{group}/step"] = self._step
-        if "time" not in self._traj[group]:
-            self._traj[f"{group}/time"] = self._time
-
-    def _create_observables_dataset(self, group, data):
-        """helper function to initialize a dataset for each observable"""
-
-        self._obsv.require_group(group)
-        # guarantee ints and floats have a shape ()
-        data = np.asarray(data)
-        self._obsv.require_dataset(
-            f"{group}/value",
-            shape=(0,) + data.shape,
-            maxshape=(None,) + data.shape,
-            dtype=data.dtype,
-        )
-        if "step" not in self._obsv[group]:
-            self._obsv[f"{group}/step"] = self._step
-        if "time" not in self._obsv[group]:
-            self._obsv[f"{group}/time"] = self._time
-
-    def _set_attr_unit(self, dset, unit):
-        """helper function to set a 'unit' attribute for an HDF5 dataset"""
-
-        if self.units[unit] is None:
-            return
-
-        dset.attrs["unit"] = self._unit_translation_dict[unit][self.units[unit]]
-
     def _allocate_buffers(self, ts):
         """Allocates buffers for timestep data that wasn't already allocated"""
         t_unit = self._unit_translation_dict["time"][self.units["time"]]
@@ -1394,25 +1340,6 @@ class ZARRMDWriter(base.WriterBase):
                 self._elements[obsv].write(value, curr_step, curr_time)
 
         self._counter += 1
-
-    def _convert_dataset_with_units(self, i):
-        """convert values in the dataset arrays with self.units dictionary"""
-
-        # Note: simply doing convert_pos_to_native(self._pos[-1]) does not
-        # actually change the values in the dataset, so assignment required
-        if self.units["time"] is not None:
-            self._time[i] = self.convert_time_to_native(self._time[i])
-        if self.units["length"] is not None:
-            if self._has["position"]:
-                self._pos[i] = self.convert_pos_to_native(self._pos[i])
-            if "edges" in self._traj["box"]:
-                self._edges[i] = self.convert_pos_to_native(self._edges[i])
-        if self._has["velocity"]:
-            if self.units["velocity"] is not None:
-                self._vel[i] = self.convert_velocities_to_native(self._vel[i])
-        if self._has["force"]:
-            if self.units["force"] is not None:
-                self._force[i] = self.convert_forces_to_native(self._force[i])
 
     def close(self):
         for elembuffer in self._elements.values():

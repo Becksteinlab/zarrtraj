@@ -15,6 +15,7 @@ from MDAnalysisTests.coordinates.base import (
     assert_timestep_almost_equal,
     assert_array_almost_equal,
 )
+from numpy.testing import assert_equal
 from MDAnalysisTests.datafiles import (
     H5MD_xvf,
     TPR_xvf,
@@ -121,6 +122,21 @@ def ref(request):
 )
 class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
+
+    # Override get_writer tests to provide n_frames kwarg
+    def test_get_writer_1(self, ref, reader, tmpdir):
+        with tmpdir.as_cwd():
+            outfile = "test-writer." + ref.ext
+            with reader.Writer(outfile, n_frames=1) as W:
+                assert_equal(isinstance(W, ref.writer), True)
+                assert_equal(W.n_atoms, reader.n_atoms)
+
+    def test_get_writer_2(self, ref, reader, tmpdir):
+        with tmpdir.as_cwd():
+            outfile = "test-writer." + ref.ext
+            with reader.Writer(outfile, n_atoms=100, n_frames=1) as W:
+                assert_equal(isinstance(W, ref.writer), True)
+                assert_equal(W.n_atoms, 100)
 
 
 # H5MD Format Reader Tests
@@ -233,6 +249,8 @@ class TestH5MDFmtReaderVariedSteps(object):
             )
 
 
+# Override all writer tests to provide n_frames kwarg
+# and parameterize s3 vs disk
 @pytest.mark.parametrize(
     "prefix",
     [
