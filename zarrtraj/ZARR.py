@@ -772,8 +772,9 @@ class H5MDElementBuffer:
         )
         # Cloud IO works best with 8-16 MB chunks
         # Use 12MB to get a reasonable number of frames per chunk
+        # if a single frame is >12MB, just select 1 FPC
         self._val_frames_per_chunk = min(
-            (12582912 // bytes_per_frame), n_frames
+            max(1, (12582912 // bytes_per_frame)), n_frames
         )
         # If the dataset is smaller than 12MB, just write it all at once
         self._val_chunks = tuple((self._val_frames_per_chunk, *shape))
