@@ -207,6 +207,7 @@ class ZARRH5MDReader(base.ReaderBase):
                 and name in ("position", "velocity", "force", "box/edges")
             ]
         )
+        self.n_frames = len(self._global_steparray)
 
         self._stepmaps = create_stepmap(
             self._elements,
@@ -399,6 +400,9 @@ class ZARRH5MDReader(base.ReaderBase):
             raise ValueError("H5MD file must contain an 'h5md' group")
 
         if self._group is None:
+            logger.info(
+                "Groups in H5MD file: %s", list(self._file["particles"])
+            )
             if len(self._file["particles"]) == 1:
                 self._group = list(self._file["particles"])[0]
             else:
@@ -710,7 +714,7 @@ class ZARRH5MDReader(base.ReaderBase):
     @property
     def n_frames(self):
         """number of frames in trajectory"""
-        return len(self._global_steparray)
+        return self.n_frames
 
     @staticmethod
     def _format_hint(thing):
@@ -1073,7 +1077,7 @@ class ZARRMDWriter(base.WriterBase):
             dict() if self.storage_options is None else self.storage_options
         )
         self._file = zarr.open_group(
-            self.filename, storage_options=self.storage_options, mode="w"
+            self.filename, storage_options=storage_options, mode="w"
         )
 
         # fill in H5MD metadata from kwargs
@@ -1122,42 +1126,6 @@ class ZARRMDWriter(base.WriterBase):
 
         # assume we won't encounter observables, require group when we do
         self._obsv = None
-
-    def _create_step_and_time_datasets(self):
-        """helper function to initialize a dataset for step and time
-
-        Hunts down first available location to create the step and time
-        datasets. This should only be called if the trajectory has no
-        dimension, otherwise the 'box/edges' group creates step and time
-        datasets since 'box' is the only required group in 'particles'.
-
-        :attr:`self._step` and :attr`self._time` serve as links to the created
-        datasets that other datasets can also point to for their step and time.
-        This serves two purposes:
-            1. Avoid redundant writing of multiple datasets that share the
-               same step and time data.
-            2. In HDF5, each chunked dataset has a cache (default 1 MiB),
-               so only 1 read is required to access step and time data
-               for all datasets that share the same step and time.
-
-        """
-
-        for group, value in self._has.items():
-            if value:
-                self._step = self._traj.require_dataset(
-                    f"{group}/step",
-                    shape=(0,),
-                    maxshape=(None,),
-                    dtype=np.int32,
-                )
-                self._time = self._traj.require_dataset(
-                    f"{group}/time",
-                    shape=(0,),
-                    maxshape=(None,),
-                    dtype=np.float32,
-                )
-                self._set_attr_unit(self._time, "time")
-                break
 
     def _allocate_buffers(self, ts):
         """Allocates buffers for timestep data that wasn't already allocated"""
@@ -1342,7 +1310,8 @@ class ZARRMDWriter(base.WriterBase):
         self._counter += 1
 
     def close(self):
-        if self._elements:
+        # Prevent close from throwing errors if __init__ hasn't been called yet
+        if hasattr(self, "_elements") and self._elements:
             for elembuffer in self._elements.values():
                 elembuffer.flush()
                 # To ensure idempotency:
