@@ -53,6 +53,8 @@ jobs:
         mdanalysis-version:
           - latest
           - develop
+    # DEBUG
+    max_parallel: 1
 
     steps:
       - uses: actions/checkout@v4
