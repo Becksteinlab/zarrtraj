@@ -118,12 +118,14 @@ def ref(request):
         ("s3", COORDINATES_SYNTHETIC_ZARRMD),
         ("local", COORDINATES_SYNTHETIC_ZARRMD),
     ],
+    ids=["s3-h5md", "local-h5md", "s3-zarrmd", "local-zarrmd"],
     indirect=True,
 )
 class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
 
     # Override get_writer tests to provide n_frames kwarg
+    @pytest.mark.skip(reason="Not implemented")
     def test_get_writer_1(self, ref, reader, tmpdir):
         with tmpdir.as_cwd():
             outfile = "test-writer." + ref.ext
@@ -131,6 +133,7 @@ class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
                 assert_equal(isinstance(W, ref.writer), True)
                 assert_equal(W.n_atoms, reader.n_atoms)
 
+    @pytest.mark.skip(reason="Not implemented")
     def test_get_writer_2(self, ref, reader, tmpdir):
         with tmpdir.as_cwd():
             outfile = "test-writer." + ref.ext

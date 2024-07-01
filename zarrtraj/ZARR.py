@@ -400,11 +400,8 @@ class ZARRH5MDReader(base.ReaderBase):
             raise ValueError("H5MD file must contain an 'h5md' group")
 
         if self._group is None:
-            logger.info(
-                "Groups in H5MD file: %s", list(self._file["particles"])
-            )
-            if len(self._file["particles"]) == 1:
-                self._group = list(self._file["particles"])[0]
+            if len(list(self._file["particles"].group_keys())) == 1:
+                self._group = list(self._file["particles"].group_keys())[0]
             else:
                 raise ValueError(
                     "If `group` kwarg not provided, H5MD file must "
