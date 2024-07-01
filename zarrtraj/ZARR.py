@@ -1344,8 +1344,11 @@ class ZARRMDWriter(base.WriterBase):
     def close(self):
         for elembuffer in self._elements.values():
             elembuffer.flush()
+            # To ensure idempotency:
+            self._elements = dict()
         if self._file is not None:
             self._file.store.close()
+            self._file = None
 
 
 class ZarrNoCache(FrameCache):
