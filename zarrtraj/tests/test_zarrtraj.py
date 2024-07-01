@@ -70,7 +70,7 @@ class H5MDFmtReference(BaseReference):
         self.topology = COORDINATES_TOPOLOGY
         self.reader = zarrtraj.ZARRH5MDReader
         self.writer = zarrtraj.ZARRMDWriter
-        self.ext = ".zarrmd"
+        self.ext = "zarrmd"
         self.prec = 3
         self.changing_dimensions = True
 
@@ -267,7 +267,7 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
 
     def test_write_different_box(self, ref, universe, tmpdir, prefix):
         if ref.changing_dimensions:
-            outfile = prefix + "write-dimensions-test" + ref.ext
+            outfile = prefix + "write-dimensions-test." + ref.ext
             with tmpdir.as_cwd():
                 with ref.writer(
                     outfile,
