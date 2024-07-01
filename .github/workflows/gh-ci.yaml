@@ -54,7 +54,7 @@ jobs:
           - latest
           - develop
       # DEBUG
-      max_parallel: 1
+      max-parallel: 1
 
     steps:
       - uses: actions/checkout@v4
