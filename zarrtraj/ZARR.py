@@ -198,11 +198,13 @@ class ZARRH5MDReader(base.ReaderBase):
         # For cases where the user wants only a subset of the elements,
         # a new steplist and dicts can be created
 
+        # Don't include observables in steplist
         self._global_steparray = create_steplist(
             [
                 h5mdelement.step
-                for h5mdelement in self._elements.values()
+                for name, h5mdelement in self._elements.items()
                 if not h5mdelement.is_time_independent()
+                and name in ("position", "velocity", "force", "box/edges")
             ]
         )
 
@@ -233,6 +235,11 @@ class ZARRH5MDReader(base.ReaderBase):
             forces=("force" in self._elements),
             **self._ts_kwargs,
         )
+
+        # Set all observables to None initially
+        for elem in self._elements:
+            if elem not in ("position", "velocity", "force", "box/edges"):
+                self.ts.data[elem] = None
 
         self.units = {
             "time": None,
@@ -571,7 +578,7 @@ class ZARRH5MDReader(base.ReaderBase):
         kwargs.setdefault("positions", ("position" in self._elements))
         kwargs.setdefault("velocities", ("velocity" in self._elements))
         kwargs.setdefault("forces", ("force" in self._elements))
-        return H5MDWriter(filename, n_atoms, **kwargs)
+        return ZARRMDWriter(filename, n_atoms, **kwargs)
 
     def __getitem__(self, frame):
         """Return the Timestep corresponding to *frame*.
@@ -742,8 +749,116 @@ class ZARRH5MDReader(base.ReaderBase):
         )
 
 
+class H5MDElementBuffer:
+    def __init__(
+        self, shape, dtype, n_frames, elem_grp, val_unit=None, t_unit=None
+    ):
+        """We don't actually know that this element will be written
+        at every frame, but, n_frames is a max length for the buffer
+        to limit memory usage
+
+        Parameters
+        ----------
+        shape : tuple
+            shape of the dataset for one frame. i.e. (n_atoms, 3)
+        """
+        # indices in the actual zarr dataset
+        # to get buffer indices, do i.e. _val_idx % _val_frames_per_chunk
+        self._val_idx = 0
+        self._t_idx = 0
+
+        bytes_per_frame = (
+            np.prod(shape, dtype=np.int32) * np.dtype(dtype).itemsize
+        )
+        # Cloud IO works best with 8-16 MB chunks
+        # Use 12MB to get a reasonable number of frames per chunk
+        self._val_frames_per_chunk = min(
+            (12582912 // bytes_per_frame), n_frames
+        )
+        # If the dataset is smaller than 12MB, just write it all at once
+        self._val_chunks = tuple((self._val_frames_per_chunk, *shape))
+        self._val_buf = np.empty(self._val_chunks, dtype=dtype)
+        # NOTE: Add compressor and filters
+        elem_grp["value"] = zarr.empty(
+            shape=self._val_chunks,
+            chunks=self._val_chunks,
+            dtype=dtype,
+        )
+        self._val = elem_grp["value"]
+        if val_unit is not None:
+            self._val.attrs["unit"] = val_unit
+
+        # Step and time both use 4 byte dtypes
+        self._t_frames_per_chunk = min((12582912 // 4), n_frames)
+        self._t_chunks = (self._t_frames_per_chunk,)
+
+        self._t_buf = np.empty(self._t_chunks, dtype=np.float32)
+        elem_grp["time"] = zarr.empty(
+            shape=self._t_chunks, chunks=self._t_chunks, dtype=np.float32
+        )
+        self._t = elem_grp["time"]
+        if t_unit is not None:
+            self._t.attrs["unit"] = t_unit
+
+        self._s_buf = np.empty(self._t_chunks, dtype=np.int32)
+        elem_grp["step"] = zarr.empty(
+            shape=self._t_chunks, chunks=self._t_chunks, dtype=np.int32
+        )
+        self._s = elem_grp["step"]
+
+    def write(
+        self,
+        data,
+        step,
+        time,
+    ):
+        # flush buffer and extend zarr dset if reached end of chunk
+        # this will never be called if n_frames is less than the chunk size
+        if self._val_idx % self._val_frames_per_chunk == 0:
+            self._val[self._val_idx - self._val_frames_per_chunk :] = (
+                self._val_buf[:]
+            )
+            # extend the dataset by one chunk
+            self._val.resize(
+                self._val.shape[0] + self._val_frames_per_chunk,
+                *self._val_chunks[1:],
+            )
+
+        if self._t_idx % self._t_frames_per_chunk == 0:
+            self._t[self._t_idx - self._t_frames_per_chunk :] = self._t_buf[:]
+            self._s[self._t_idx - self._t_frames_per_chunk :] = self._s_buf[:]
+            self._t.resize(self._t.shape[0] + self._t_frames_per_chunk)
+            self._s.resize(self._s.shape[0] + self._t_frames_per_chunk)
+
+        self._val_buf[self._val_idx % self._val_frames_per_chunk] = data
+        self._val_idx += 1
+        self._t_buf[self._t_idx % self._t_frames_per_chunk] = time
+        self._s_buf[self._t_idx % self._t_frames_per_chunk] = step
+        self._t_idx += 1
+
+    def flush(self):
+        """Write everything remaining in the buffers to the zarr datasets
+        and shink the zarr datasets to the correct size.
+        """
+        self._val[
+            self._val_idx - self._val_frames_per_chunk : self._val_idx
+        ] = self._val_buf[
+            : (self._val_idx - 1 % self._val_frames_per_chunk) + 1
+        ]
+        self._val.resize(self._val_idx, *self._val_chunks[1:])
+
+        self._t[self._t_idx - self._t_frames_per_chunk : self._t_idx] = (
+            self._t_buf[: (self._t_idx - 1 % self._t_frames_per_chunk) + 1]
+        )
+        self._t.resize(self._t_idx)
+        self._s[self._t_idx - self._t_frames_per_chunk : self._t_idx] = (
+            self._s_buf[: (self._t_idx - 1 % self._t_frames_per_chunk) + 1]
+        )
+        self._s.resize(self._t_idx)
+
+
 class ZARRMDWriter(base.WriterBase):
-   
+
     format = "ZARRMD"
     multiframe = True
     #: These variables are not written from :attr:`Timestep.data`
@@ -812,10 +927,8 @@ class ZARRMDWriter(base.WriterBase):
         filename,
         n_atoms,
         n_frames=None,
-
+        storage_options=None,
         convert_units=True,
-        chunks=None,
-
         positions=True,
         velocities=True,
         forces=True,
@@ -829,23 +942,23 @@ class ZARRMDWriter(base.WriterBase):
         creator_version=mda.__version__,
         **kwargs,
     ):
+        self._file = None
+        self._elements = dict()
 
         self.filename = filename
         if n_atoms == 0:
             raise ValueError("H5MDWriter: no atoms in output trajectory")
-        self._driver = driver
 
         self.n_atoms = n_atoms
-        self.n_frames = n_frames
-        self.chunks = (1, n_atoms, 3) if chunks is None else chunks
-        if self.chunks is False and self.n_frames is None:
+        if not n_frames:
             raise ValueError(
-                "H5MDWriter must know how many frames will be "
-                "written if ``chunks=False``."
+                "H5MDWriter: no frames in output trajectory. "
+                "Please provide a nonzero value for 'n_frames' kwarg"
             )
+        self.n_frames = n_frames
+        self.storage_options = storage_options
 
         self.convert_units = convert_units
-        self._file = None
 
         # The writer defaults to writing all data from the parent Timestep if
         # it exists. If these are True, the writer will check each
@@ -906,10 +1019,10 @@ class ZARRMDWriter(base.WriterBase):
             )
 
         # This should only be called once when first timestep is read.
-        if self.h5md_file is None:
+        if self._file is None:
             self._determine_units(ag)
             self._open_file()
-            self._initialize_hdf5_datasets(ts)
+            self._initialize_zarrmd_file(ts)
 
         return self._write_next_timestep(ts)
 
@@ -955,28 +1068,26 @@ class ZARRMDWriter(base.WriterBase):
                 )
 
     def _open_file(self):
-        """Opens file with `H5PY`_ library and fills in metadata from kwargs.
 
-        :attr:`self.h5md_file` becomes file handle that links to root level.
-
-        """
-
-        self.h5md_file = h5py.File(
-            name=self.filename, mode="w", driver=self._driver
+        storage_options = (
+            dict() if self.storage_options is None else self.storage_options
+        )
+        self._file = zarr.open_group(
+            self.filename, storage_options=self.storage_options, mode="w"
         )
 
         # fill in H5MD metadata from kwargs
-        self.h5md_file.require_group("h5md")
-        self.h5md_file["h5md"].attrs["version"] = np.array(self.H5MD_VERSION)
-        self.h5md_file["h5md"].require_group("author")
-        self.h5md_file["h5md/author"].attrs["name"] = self.author
+        self._file.require_group("h5md")
+        self._file["h5md"].attrs["version"] = self.H5MD_VERSION
+        self._file["h5md"].require_group("author")
+        self._file["h5md/author"].attrs["name"] = self.author
         if self.author_email is not None:
-            self.h5md_file["h5md/author"].attrs["email"] = self.author_email
-        self.h5md_file["h5md"].require_group("creator")
-        self.h5md_file["h5md/creator"].attrs["name"] = self.creator
-        self.h5md_file["h5md/creator"].attrs["version"] = self.creator_version
+            self._file["h5md/author"].attrs["email"] = self.author_email
+        self._file["h5md"].require_group("creator")
+        self._file["h5md/creator"].attrs["name"] = self.creator
+        self._file["h5md/creator"].attrs["version"] = self.creator_version
 
-    def _initialize_hdf5_datasets(self, ts):
+    def _initialize_zarrmd_file(self, ts):
         """initializes all datasets that will be written to by
         :meth:`_write_next_timestep`
 
@@ -994,72 +1105,23 @@ class ZARRMDWriter(base.WriterBase):
         # for keeping track of where to write in the dataset
         self._counter = 0
 
-        # ask the parent file if it has positions, velocities, and forces
-        # if prompted by the writer with the self._write_* attributes
-        self._has = {
-            group: (
-                getattr(ts, f"has_{attr}")
-                if getattr(self, f"_write_{attr}")
-                else False
-            )
-            for group, attr in zip(
-                ("position", "velocity", "force"),
-                ("positions", "velocities", "forces"),
-            )
-        }
-
         # initialize trajectory group
-        self.h5md_file.require_group("particles").require_group("trajectory")
-        self._traj = self.h5md_file["particles/trajectory"]
+        self._file.require_group("particles").require_group("trajectory")
+        self._traj = self._file["particles/trajectory"]
         self.data_keys = [
             key for key in ts.data.keys() if key not in self.data_blacklist
         ]
-        if self.data_keys:
-            self._obsv = self.h5md_file.require_group("observables")
 
         # box group is required for every group in 'particles'
         self._traj.require_group("box")
         self._traj["box"].attrs["dimension"] = 3
-        if ts.dimensions is not None and np.all(ts.dimensions > 0):
-            self._traj["box"].attrs["boundary"] = 3 * ["periodic"]
-            self._traj["box"].require_group("edges")
-            self._edges = self._traj.require_dataset(
-                "box/edges/value",
-                shape=(0, 3, 3),
-                maxshape=(None, 3, 3),
-                dtype=np.float32,
-            )
-            self._step = self._traj.require_dataset(
-                "box/edges/step", shape=(0,), maxshape=(None,), dtype=np.int32
-            )
-            self._time = self._traj.require_dataset(
-                "box/edges/time", shape=(0,), maxshape=(None,), dtype=np.float32
-            )
-            self._set_attr_unit(self._edges, "length")
-            self._set_attr_unit(self._time, "time")
-        else:
-            # if no box, boundary attr must be "none" according to H5MD
-            self._traj["box"].attrs["boundary"] = 3 * ["none"]
-            self._create_step_and_time_datasets()
 
-        if self.has_positions:
-            self._create_trajectory_dataset("position")
-            self._pos = self._traj["position/value"]
-            self._set_attr_unit(self._pos, "length")
-        if self.has_velocities:
-            self._create_trajectory_dataset("velocity")
-            self._vel = self._traj["velocity/value"]
-            self._set_attr_unit(self._vel, "velocity")
-        if self.has_forces:
-            self._create_trajectory_dataset("force")
-            self._force = self._traj["force/value"]
-            self._set_attr_unit(self._force, "force")
+        # assume boundary condition is "none" until first
+        # frame with dimensions is encountered in _write_next_timestep()
+        self._traj["box"].attrs["boundary"] = 3 * ["none"]
 
-        # intialize observable datasets from ts.data dictionary that
-        # are NOT in self.data_blacklist
-        if self.data_keys:
-            for key in self.data_keys:
-                self._create_observables_dataset(key, ts.data[key])
+        # assume we won't encounter observables, require group when we do
+        self._obsv = None
 
     def _create_step_and_time_datasets(self):
         """helper function to initialize a dataset for step and time
@@ -1150,6 +1212,107 @@ class ZARRMDWriter(base.WriterBase):
 
         dset.attrs["unit"] = self._unit_translation_dict[unit][self.units[unit]]
 
+    def _allocate_buffers(self, ts):
+        """Allocates buffers for timestep data that wasn't already allocated"""
+        t_unit = self._unit_translation_dict["time"][self.units["time"]]
+
+        length_unit = (
+            self._unit_translation_dict["length"][self.units["length"]]
+            if self.units["length"] is not None
+            else None
+        )
+        vel_unit = (
+            self._unit_translation_dict["velocity"][self.units["velocity"]]
+            if self.units["velocity"] is not None
+            else None
+        )
+        force_unit = (
+            self._unit_translation_dict["force"][self.units["force"]]
+            if self.units["force"] is not None
+            else None
+        )
+
+        if (
+            ts.dimensions is not None
+            and np.all(ts.dimensions > 0)
+            and "box/edges" not in self._elements
+        ):
+            self._traj["box"].attrs["boundary"] = 3 * ["periodic"]
+            self._traj["box"].require_group("edges")
+            self._elements["box/edges"] = H5MDElementBuffer(
+                ts.triclinic_dimensions.shape,
+                ts.triclinic_dimensions.dtype,
+                self.n_frames,
+                self._traj["box/edges"],
+                val_unit=length_unit,
+                t_unit=t_unit,
+            )
+
+        if (
+            self._write_positions
+            and ts.has_positions
+            and "position" not in self._elements
+        ):
+            self._traj.require_group("position")
+            self._elements["position"] = H5MDElementBuffer(
+                ts.positions.shape,
+                ts.positions.dtype,
+                self.n_frames,
+                self._traj["position"],
+                val_unit=length_unit,
+                t_unit=t_unit,
+            )
+
+        if (
+            self._write_velocities
+            and ts.has_velocities
+            and "velocity" not in self._elements
+        ):
+            self._traj.require_group("velocity")
+            self._elements["velocity"] = H5MDElementBuffer(
+                ts.velocities.shape,
+                ts.velocities.dtype,
+                self.n_frames,
+                self._traj["velocity"],
+                val_unit=vel_unit,
+                t_unit=t_unit,
+            )
+
+        if (
+            self._write_forces
+            and ts.has_forces
+            and "force" not in self._elements
+        ):
+            self._traj.require_group("force")
+            self._elements["force"] = H5MDElementBuffer(
+                ts.forces.shape,
+                ts.forces.dtype,
+                self.n_frames,
+                self._traj["force"],
+                val_unit=force_unit,
+                t_unit=t_unit,
+            )
+
+        for obsv, value in ts.data.items():
+            if (
+                value is not None
+                and obsv not in self.data_blacklist
+                and obsv not in self._elements
+            ):
+                if self._obsv is None:
+                    self._file.require_group("observables").require_group(
+                        "trajectory"
+                    )
+                    self._obsv = self._file["observables/trajectory"]
+                self._obsv.require_group(obsv)
+                self._elements[obsv] = H5MDElementBuffer(
+                    ts.data[obsv].shape,
+                    ts.data[obsv].dtype,
+                    self.n_frames,
+                    self._obsv[obsv],
+                    t_unit=self.units["time"],
+                )
+
     def _write_next_timestep(self, ts):
         """Write coordinates and unitcell information to H5MD file.
 
@@ -1171,53 +1334,63 @@ class ZARRMDWriter(base.WriterBase):
 
         i = self._counter
 
-        # H5MD step refers to the integration step at which the data were
-        # sampled, therefore ts.data['step'] is the most appropriate value
-        # to use. However, step is also necessary in H5MD to allow
-        # temporal matching of the data, so ts.frame is used as an alternative
-        self._step.resize(self._step.shape[0] + 1, axis=0)
-        try:
-            self._step[i] = ts.data["step"]
-        except KeyError:
-            self._step[i] = ts.frame
-        if len(self._step) > 1 and self._step[i] < self._step[i - 1]:
-            raise ValueError(
-                "The H5MD standard dictates that the step "
-                "dataset must increase monotonically in value."
+        self._allocate_buffers(ts)
+
+        curr_time = (
+            ts.time
+            if self.units["time"] is None
+            else self.convert_time_to_native(ts.time)
+        )
+        curr_step = ts.data["step"] if "step" in ts.data else ts.frame
+
+        # NOTE: check monotinic increasing
+
+        if ts.dimensions is not None and "box/edges" in self._elements:
+
+            box = (
+                ts.triclinic_dimensions
+                if self.units["length"] is None
+                else self.convert_pos_to_native(ts.triclinic_dimensions)
             )
+            self._elements["box/edges"].write(box, curr_step, curr_time)
 
-        # the dataset.resize() method should work with any chunk shape
-        self._time.resize(self._time.shape[0] + 1, axis=0)
-        self._time[i] = ts.time
+            if not ts.has_positions and "position" in self._elements:
+                raise NoDataError(
+                    "H5MD requires that positions and box dimensions are "
+                    "sampled at the same rate. No positions found in Timestep."
+                )
 
-        if "edges" in self._traj["box"]:
-            self._edges.resize(self._edges.shape[0] + 1, axis=0)
-            self._edges.write_direct(
-                ts.triclinic_dimensions, dest_sel=np.s_[i, :]
+        if ts.has_positions and "position" in self._elements:
+            pos = (
+                ts.positions
+                if self.units["length"] is None
+                else self.convert_pos_to_native(ts.positions)
             )
-        # These datasets are not resized if n_frames was provided as an
-        # argument, as they were initialized with their full size.
-        if self.has_positions:
-            if self.n_frames is None:
-                self._pos.resize(self._pos.shape[0] + 1, axis=0)
-            self._pos.write_direct(ts.positions, dest_sel=np.s_[i, :])
-        if self.has_velocities:
-            if self.n_frames is None:
-                self._vel.resize(self._vel.shape[0] + 1, axis=0)
-            self._vel.write_direct(ts.velocities, dest_sel=np.s_[i, :])
-        if self.has_forces:
-            if self.n_frames is None:
-                self._force.resize(self._force.shape[0] + 1, axis=0)
-            self._force.write_direct(ts.forces, dest_sel=np.s_[i, :])
+            self._elements["position"].write(pos, curr_step, curr_time)
 
-        if self.data_keys:
-            for key in self.data_keys:
-                obs = self._obsv[f"{key}/value"]
-                obs.resize(obs.shape[0] + 1, axis=0)
-                obs[i] = ts.data[key]
+        if ts.has_velocities and "velocity" in self._elements:
+            vel = (
+                ts.velocities
+                if self.units["velocity"] is None
+                else self.convert_velocities_to_native(ts.velocities)
+            )
+            self._elements["velocity"].write(vel, curr_step, curr_time)
 
-        if self.convert_units:
-            self._convert_dataset_with_units(i)
+        if ts.has_forces and "force" in self._elements:
+            force = (
+                ts.forces
+                if self.units["force"] is None
+                else self.convert_forces_to_native(ts.forces)
+            )
+            self._elements["force"].write(force, curr_step, curr_time)
+
+        for obsv, value in ts.data.items():
+            if (
+                value is not None
+                and obsv not in self.data_blacklist
+                and obsv in self._elements
+            ):
+                self._elements[obsv].write(value, curr_step, curr_time)
 
         self._counter += 1
 
@@ -1240,20 +1413,11 @@ class ZARRMDWriter(base.WriterBase):
             if self.units["force"] is not None:
                 self._force[i] = self.convert_forces_to_native(self._force[i])
 
-    @property
-    def has_positions(self):
-        """``True`` if writer is writing positions from Timestep."""
-        return self._has["position"]
-
-    @property
-    def has_velocities(self):
-        """``True`` if writer is writing velocities from Timestep."""
-        return self._has["velocity"]
-
-    @property
-    def has_forces(self):
-        """``True`` if writer is writing forces from Timestep."""
-        return self._has["force"]
+    def close(self):
+        for elembuffer in self._elements.values():
+            elembuffer.flush()
+        if self._file is not None:
+            self._file.store.close()
 
 
 class ZarrNoCache(FrameCache):
@@ -1365,7 +1529,7 @@ class ZarrNoCache(FrameCache):
                         if curr_time is None and self._elements[elem].has_time:
                             curr_time = self._elements[elem].time[obsv_index]
                     elif elem in self._timestep.data:
-                        del self._timestep.data[elem]
+                        self._timestep.data[elem] = None
                 else:
                     # must be time independent
                     self._timestep.data[elem] = h5mdelement.value[:]
