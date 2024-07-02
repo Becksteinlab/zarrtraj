@@ -123,6 +123,13 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Becksteinlab/zarrtraj
 
+      - name: debug
+        if: failure()
+        uses: namespacelabs/breakpoint-action@v0
+        with:
+          duration: 30m
+          authorized-users: ljwoods2
+
   pylint_check:
     if: github.repository == 'Becksteinlab/zarrtraj'
     needs: environment-config
