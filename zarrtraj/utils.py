@@ -198,23 +198,6 @@ def create_stepmap(elements: Dict[str, H5MDElement]):
     return stepmap
 
 
-# def create_timemap(
-#     elements: Dict[str, H5MDElement]
-# ):
-#
-#     timemap = {}
-#
-#     for elem, h5mdelement in elements.items():
-#         if h5mdelement.is_time_independent() or not h5mdelement.has_time():
-#             continue
-#
-#         timemap[elem] = {}
-#         for i, step in enumerate(h5mdelement.step):
-#             timemap[elem][step] = i
-#
-#     return timemap
-
-
 def get_explicit_time(file, h5mdelement):
     """
     Convert a fixed time to explicit time array
