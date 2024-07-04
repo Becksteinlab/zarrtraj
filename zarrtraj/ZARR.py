@@ -734,8 +734,11 @@ class ZARRH5MDReader(base.ReaderBase):
         file = zarr.open_group(mapping, mode="r")
 
         if group is None:
-            if len(file["particles"]) == 1:
-                group = list(file["particles"])[0]
+            traj_keys = list(file["particles"].group_keys())
+            if len(traj_keys) == 1 or all(
+                traj_key == traj_keys[0] for traj_key in traj_keys
+            ):
+                group = traj_keys[0]
             else:
                 raise ValueError(
                     "Could not construct a minimal topology from the H5MD "
