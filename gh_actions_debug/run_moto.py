@@ -3,6 +3,8 @@ import os
 from zarrtraj.tests.datafiles import COORDINATES_SYNTHETIC_ZARRMD
 import zarr
 import s3fs
+import boto3
+import time
 
 os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
@@ -19,7 +21,11 @@ os.environ["S3_ENDPOINT_URL"] = "http://localhost:5000"
 
 server = ThreadedMotoServer()
 server.start()
-
+s3_resource = boto3.resource("s3")
+s3_resource.create_bucket(
+    Bucket="zarrtraj-test-data",
+    CreateBucketConfiguration={"LocationConstraint": "us-west-1"},
+)
 # upload file
 source = zarr.open_group(COORDINATES_SYNTHETIC_ZARRMD, mode="r")
 obj_name = os.path.basename(COORDINATES_SYNTHETIC_ZARRMD)
@@ -27,3 +33,4 @@ s3_fs = s3fs.S3FileSystem()
 cloud_store = s3fs.S3Map(root=f"s3://zarrtraj-test-data/{obj_name}", s3=s3_fs)
 
 zarr.convenience.copy_store(source.store, cloud_store, if_exists="raise")
+time.sleep(5000)

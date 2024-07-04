@@ -400,8 +400,13 @@ class ZARRH5MDReader(base.ReaderBase):
             raise ValueError("H5MD file must contain an 'h5md' group")
 
         if self._group is None:
-            if len(list(self._file["particles"].group_keys())) == 1:
-                self._group = list(self._file["particles"].group_keys())[0]
+            # NOTE: we do this because running moto on gh actions
+            # duplicates all keys in the zarr file when reading
+            traj_keys = list(self._file["particles"].group_keys())
+            if len(traj_keys) == 1 or all(
+                traj_key == traj_keys[0] for traj_key in traj_keys
+            ):
+                self._group = traj_keys[0]
             else:
                 raise ValueError(
                     "If `group` kwarg not provided, H5MD file must "
