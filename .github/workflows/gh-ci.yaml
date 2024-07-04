@@ -53,6 +53,8 @@ jobs:
         mdanalysis-version:
           - latest
           - develop
+      # DEBUG
+      max-parallel: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -104,11 +106,16 @@ jobs:
           conda list
 
       - name: Run tests
-        # Tests must be sequential to avoid 
-        # moto buckets and groups interfering with
-        # one another
+        # NOTE: parallelize once debugging done
         run: |
-          pytest -v --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
+          pytest -v -x --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
+        
+      - name: debug
+        if: failure()
+        uses: namespacelabs/breakpoint-action@v0
+        with:
+          duration: 30m
+          authorized-users: ljwoods2
 
       - name: codecov
         if: github.repository == 'Becksteinlab/zarrtraj' && github.event_name !=
@@ -120,6 +127,8 @@ jobs:
           verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Becksteinlab/zarrtraj
+
+      
 
   pylint_check:
     if: github.repository == 'Becksteinlab/zarrtraj'

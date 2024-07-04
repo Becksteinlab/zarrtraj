@@ -5,7 +5,7 @@ This is a kit that provides the ability to read and write trajectory data in the
 
 # Add imports here
 from importlib.metadata import version
-from .ZARR import ZARRH5MDReader
+from .ZARR import ZARRH5MDReader, ZARRMDWriter
 
 
 __version__ = version("zarrtraj")
