@@ -53,8 +53,6 @@ jobs:
         mdanalysis-version:
           - latest
           - develop
-      # DEBUG
-      max-parallel: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +105,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -n auto -v -x --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
+          pytest -v -x --cov=zarrtraj --cov-report=xml --color=yes zarrtraj/tests/
 
       - name: codecov
         if: github.repository == 'Becksteinlab/zarrtraj' && github.event_name !=
