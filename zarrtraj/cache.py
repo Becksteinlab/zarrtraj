@@ -31,19 +31,16 @@ class FrameCache(abc.ABC):
         present in the file before requesting them
         from the cache
         """
-        pass
 
     @abc.abstractmethod
     def load_frame(self, *args, **kwargs):
         """Call this in the reader's
         _read_next_frame() method
         """
-        pass
 
     @abc.abstractmethod
     def cleanup(self, *args, **kwargs):
         """Call this in the reader's close() method"""
-        pass
 
 
 class AsyncFrameCache(FrameCache, threading.Thread):
@@ -132,17 +129,14 @@ class AsyncFrameCache(FrameCache, threading.Thread):
     def _get_key(self, key):
         """Loads the chunk with the given key
         from the file into the cache"""
-        pass
 
     @abc.abstractmethod
     def _evict(self, key):
         """Removes the chunk with the given key from
         the cache"""
-        pass
 
     @abc.abstractmethod
     def _load_timestep(self, frame):
         """Loads the frame with the given frame number
         into the timestep object associated with the cache class
         """
-        pass

@@ -723,7 +723,6 @@ class ZARRH5MDReader(base.ReaderBase):
         """Can this Reader read *thing*"""
         # nb, filename strings can still get passed through if
         # format='H5MD' is used
-        pass
 
     @staticmethod
     def parse_n_atoms(filename, group=None, so=None):
@@ -1449,5 +1448,3 @@ class ZarrNoCache(FrameCache):
 class ZarrLRUCache(ZarrNoCache):
     """Clone of ZarrNoCache to allow differentiation since
     ZarrLRUCache is a special case where the reader handles the cache"""
-
-    pass
