@@ -12,7 +12,6 @@ Welcome to zarrtraj's documentation!
 
    getting_started
    api
-   advanced_usage
-   zarrtraj-file-spec/v0.1.0
+   zarrmd-file-spec/v0.1.0
    benchmarks
 
