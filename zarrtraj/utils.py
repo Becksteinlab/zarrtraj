@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import zarr
 from typing import Union, Dict
 import numpy as np
-from .kerchunk_link_patch import SingleHdf5ToZarrPatched
+from kerchunk.hdf import SingleHdf5ToZarr
 
 
 class H5MDElement:
@@ -147,7 +147,7 @@ def get_h5_zarr_mapping(
 ) -> str:
 
     with fsspec.open(url, **so) as inf:
-        h5chunks = SingleHdf5ToZarrPatched(inf, url, inline_threshold=100)
+        h5chunks = SingleHdf5ToZarr(inf, url, inline_threshold=100)
         fo = h5chunks.translate(preserve_linked_dsets=True)
 
     if protocol == "s3":

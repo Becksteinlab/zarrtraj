@@ -10,7 +10,7 @@ dependencies:
   ### Core requirements ###
   - MDAnalysis>=2.7.0
   - zarr>=2.11.0
-  - kerchunk>=0.2.5
+  - kerchunk>=0.2.6
   - h5py>=3.11.0
   - dask
 
