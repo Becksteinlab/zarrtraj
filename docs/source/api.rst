@@ -1,4 +1,4 @@
 API Documentation
 =================
 
-.. automodule:: zarrtraj.ZARRTRAJ
+.. automodule:: zarrtraj.ZARR

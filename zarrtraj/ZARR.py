@@ -3,13 +3,20 @@
 Example: Loading a .zarrmd file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To load a ZarrTraj simulation from a .zarrmd trajectory file, pass a
-topology file and a path to the .zarrmd file to a
+``zarrmd`` files are H5MD-formatted files stored in the Zarr format.
+To learn more, see the `H5MD documentation <https://nongnu.org/h5md/>`_,
+the `Zarr documentation <https://zarr.readthedocs.io/en/stable/>`_,
+and the :ref:`zarrmd format page <zarrmd>`.
+
+To load a simulation from a ``.zarrmd`` trajectory file, pass a
+topology file and a path to the ``.zarrmd`` file to a
 :class:`~MDAnalysis.core.universe.Universe`::
 
     import zarrtraj
     import MDAnalysis as mda
     u = mda.Universe("topology.tpr", "trajectory.zarrmd")
+
+The reader can also handle reading from a .h5md file.
 
 Example: Reading from cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -17,7 +24,8 @@ Example: Reading from cloud services
 Zarrtraj currently supports reading from .h5md and .zarrmd files stored in
 AWS, Google Cloud, and Azure Block Storage.
 
-To read from AWS S3, pass the s3 url path to the file as a trajectory::
+To read from AWS S3, pass the S3 url path to the file as the trajectory
+argument::
 
     import zarrtraj
     import MDAnalysis as mda
@@ -28,7 +36,7 @@ To read from AWS S3, pass the s3 url path to the file as a trajectory::
     os.environ["AWS_PROFILE"] = "sample_profile"
     os.environ["AWS_REGION"] = "us-west-1"
 
-    u = mda.Universe("topology.tpr", "s3://zarrtraj-test-data/trajectory.zarrmd")
+    u = mda.Universe("topology.tpr", "s3://sample-bucket/trajectory.zarrmd")
 
 AWS provides a VSCode extension to manage AWS authentication profiles
 `here <https://aws.amazon.com/visualstudiocode/>`_.
@@ -39,10 +47,41 @@ AWS provides a VSCode extension to manage AWS authentication profiles
     in the cloud with random-access patterns. Iterate 
     sequentially for best performance.
 
+Example: Writing directly to cloud storage
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Currently, writing directly to cloud storage is only supported for the ``zarmd`` format.
+If you want to write directly to a cloud storage in the H5MD format, please raise an issue
+on the `zarrtraj GitHub <https://github.com/Becksteinlab/zarrtraj>`_.
+
+All datasets in the file will be written using the same chunking strategy: 
+`~12MB per chunk <https://d1.awsstatic.com/whitepapers/AmazonS3BestPractices.pdf>`_,
+regardless of the data type, number of atoms, or number of frames in the trajectory. The only
+exceptions to this are when a single frame of the trajectory is larger than 12MB, in which case
+the chunk size will be 1 frame, or when the dataset is smaller than 12MB, in which case the
+dataset will be written in a single chunk::
+
+    import zarrtraj
+    import MDAnalysis as mda
+
+    u = mda.Universe("topology.tpr", "trajectory.xtc")
+    with mda.Writer("s3://sample-bucket/trajectory.zarrmd", 
+                    n_atoms=u.atoms.n_atoms, 
+                    n_frames=u.trajectory.n_frames) as w:
+        for ts in u.trajectory:
+            w.write(u.atoms)
+
+Note that the `n_frames` argument is required. This is because the writer needs to know
+the number of frames in the output trajectory in order to determine the number of frames per chunk
+for each dataset.
+
 Classes
 ^^^^^^^
 
 .. autoclass:: ZARRH5MDReader
+   :members:
+   :inherited-members:
+.. autoclass:: ZARRMDWriter
    :members:
    :inherited-members:
 """
@@ -144,28 +183,53 @@ class ZARRH5MDReader(base.ReaderBase):
         """
         Parameters
         ----------
-        filename : str or :class:`h5py.File`
-            trajectory filename or open h5py file
+        filename : str
+            trajectory filename or URL
         convert_units : bool (optional)
             convert units to MDAnalysis units
+        group : str (optional)
+            group in 'particles' to read from. Not required if only one group
+            is present in 'particles'
         **kwargs : dict
             General reader arguments.
 
         Raises
         ------
         RuntimeError
-            when `H5PY`_ is not installed
-        RuntimeError
+            when ``Zarr`` is not installed
+        ValueError
             when a unit is not recognized by MDAnalysis
         ValueError
-            when ``n_atoms`` changes values between timesteps
+            when the length units of position and box/edges in the trajectory
+            group do not match
+        ValueError
+            when the time units of all time-dependent datasets do not match
         ValueError
             when ``convert_units=True`` but the H5MD file contains no units
         ValueError
+            when an unsupported URL protocol is provided
+        ValueError
             when dimension of unitcell is not 3
         ValueError
-            when an MPI communicator object is passed to the reader
-            but ``driver != 'mpio'``
+            when the simulation box is not 'periodic' or 'none'
+        ValueError
+            when a position, velocity, force, or simulation group box is
+            time-independent
+        ValueError
+            when the H5MD trajectory groups' 'box/edges' and 'position' do not
+            share the same step and time datasets
+        NoDataError
+            when the H5MD file does not contain an 'h5md` group
+        NoDataError
+            when the H5MD file does not contain a 'box` group
+        NoDataError
+            when the simulation box is 'periodic' but the H5MD trajectory
+            group does not contain a 'box/edges' group
+        NoDataError
+            when the H5MD file contains multiple groups in 'particles' and
+            the ``group`` kwarg is not provided
+        NoDataError
+            when a time-dependent dataset does not have a time dataset
         NoDataError
             when the H5MD file has no 'position', 'velocity', or
             'force' group
@@ -192,9 +256,6 @@ class ZARRH5MDReader(base.ReaderBase):
         self._group = group
         self._open_trajectory()
 
-        # Though the user may not want all elements and therefore
-        # won't want a steplist constructed from all elements,
-        # this will cover the majority of cases.
         # For cases where the user wants only a subset of the elements,
         # a new steplist and dicts can be created
 
@@ -283,7 +344,7 @@ class ZARRH5MDReader(base.ReaderBase):
                         self._elements[elem].valueunit
                     ]
                 except KeyError:
-                    raise RuntimeError(
+                    raise ValueError(
                         f"length unit '{self._elements[elem].valueunit}' "
                         "is not recognized by ZarrH5MDReader. "
                     )
@@ -397,7 +458,7 @@ class ZARRH5MDReader(base.ReaderBase):
             self._file = zarr.open_group(self._mapping, mode="r")
 
         if "h5md" not in self._file:
-            raise ValueError("H5MD file must contain an 'h5md' group")
+            raise NoDataError("H5MD file must contain an 'h5md' group")
 
         if self._group is None:
             # NOTE: we do this because running moto on gh actions
@@ -408,7 +469,7 @@ class ZARRH5MDReader(base.ReaderBase):
             ):
                 self._group = traj_keys[0]
             else:
-                raise ValueError(
+                raise NoDataError(
                     "If `group` kwarg not provided, H5MD file must "
                     "contain exactly one group in 'particles'"
                 )
@@ -488,7 +549,7 @@ class ZARRH5MDReader(base.ReaderBase):
         return self._read_frame(self._frame + 1)
 
     def _read_frame(self, frame):
-        """reads data from h5md file and copies to current timestep"""
+        """reads data from h5md-formatted file and copies to current timestep"""
         # frame seq update case 1: read called from iterator-like context
         if not self._frame_seq:
             self._frame_seq = None
@@ -510,8 +571,6 @@ class ZARRH5MDReader(base.ReaderBase):
     def _convert_units(self):
         """converts time, position, velocity, and force values if they
         are not given in MDAnalysis standard units
-
-        See https://userguide.mdanalysis.org/1.0.0/units.html
         """
 
         self.ts.time = self.convert_time_from_native(self.ts.time)
@@ -537,45 +596,10 @@ class ZARRH5MDReader(base.ReaderBase):
             self._file.store.close()
 
     def _reopen(self):
-        """reopen trajectory
-
-        Note
-        ----
-
-        If the `driver` and `comm` arguments were used to open the
-        hdf5 file (specifically, ``driver="mpio"``) then this method
-        does *not* close and open the file like most readers because
-        the information about the MPI communicator would be lost; instead
-        it rewinds the trajectory back to the first timstep.
-
-        """
         self.close()
         self._open_trajectory()
 
     def Writer(self, filename, n_atoms=None, **kwargs):
-        """Return writer for trajectory format
-
-        Note
-        ----
-        The chunk shape of the input file will not be copied to the output
-        file, as :class:`H5MDWriter` uses a chunk shape of ``(1, n_atoms, 3)``
-        by default. To use a custom chunk shape, you must specify the
-        `chunks` argument. If you would like to copy an existing chunk
-        format from a dataset (positions, velocities, or forces), do
-        the following::
-
-            chunks = u.trajectory._particle_group['position/value'].chunks
-
-        Note that the writer will set the same layout for all particle groups.
-
-        See Also
-        --------
-        :class:`H5MDWriter`  Output class for the H5MD format
-
-
-        .. versionadded:: 2.0.0
-
-        """
         if n_atoms is None:
             n_atoms = self.n_atoms
         kwargs.setdefault("compressor", self.compressor)
@@ -600,12 +624,9 @@ class ZARRH5MDReader(base.ReaderBase):
 
         Note
         ----
-        ZarrtrajReader overrides this method to get
+        ZARRH5MDReader overrides this method to get
         access to the the sequence of frames
-        the user wants. If self._frame_seq is None
-        by the time the first read is called, we assume
-        the full full trajectory is being accessed
-        in a for loop
+        the user wants.
         """
         if isinstance(frame, numbers.Integral):
             frame = self._apply_limits(frame)
@@ -643,7 +664,14 @@ class ZARRH5MDReader(base.ReaderBase):
             )
 
     def __iter__(self):
-        """Iterate over all frames in the trajectory"""
+        """Iterate over all frames in the trajectory
+
+        Note
+        ----
+        ZARRH5MDReader overrides this method to get
+        access to the the sequence of frames
+        the user wants.
+        """
         self._reopen()
         self._frame_seq = collections.deque(range(0, self.n_frames))
         self._cache.update_frame_seq(self._frame_seq)
@@ -670,7 +698,14 @@ class ZARRH5MDReader(base.ReaderBase):
         return ts
 
     def iter_as_aux(self, auxname):
-        """Iterate over the trajectory with an auxiliary reader"""
+        """Iterate over the trajectory with an auxiliary reader
+
+        Note
+        ----
+        ZARRH5MDReader overrides this method to get
+        access to the the sequence of frames
+        the user wants.
+        """
         aux = self._check_for_aux(auxname)
         self._reopen()
         self._frame_seq = collections.deque(range(0, self.n_frames))
@@ -691,6 +726,11 @@ class ZARRH5MDReader(base.ReaderBase):
         Will also copy the current state of the Timestep held in the original
         Reader.
 
+        Note
+        ----
+        ZARRH5MDReader overrides this method to get
+        access to the the sequence of frames
+        the user wants.
 
         .. versionchanged:: 2.2.0
            Arguments used to construct the reader are correctly captured and
@@ -721,8 +761,7 @@ class ZARRH5MDReader(base.ReaderBase):
     @staticmethod
     def _format_hint(thing):
         """Can this Reader read *thing*"""
-        # nb, filename strings can still get passed through if
-        # format='H5MD' is used
+        # When should the reader be used by default?
 
     @staticmethod
     def parse_n_atoms(filename, group=None, so=None):
@@ -739,7 +778,7 @@ class ZARRH5MDReader(base.ReaderBase):
             ):
                 group = traj_keys[0]
             else:
-                raise ValueError(
+                raise NoDataError(
                     "Could not construct a minimal topology from the H5MD "
                     "trajectory file, as `group` kwarg was not provided, "
                     "and H5MD file did not contain exactly one group in 'particles'"
@@ -866,6 +905,75 @@ class H5MDElementBuffer:
 
 
 class ZARRMDWriter(base.WriterBase):
+    """
+    Writer for the H5MD format using Zarr.
+
+    Parameters
+    ----------
+    filename : str
+        filename or URL to write to
+    n_atoms : int
+        number of atoms in the system
+    n_frames : int
+        number of frames to be written in the output trajectory
+    storage_options : dict (optional)
+        options to pass to the storage backend via ``fsspec``
+    convert_units : bool (optional)
+        Convert units from MDAnalysis to desired units [``True``]
+    positions : bool (optional)
+        Write positions into the trajectory [``True``]
+    velocities : bool (optional)
+        Write velocities into the trajectory [``True``]
+    forces : bool (optional)
+        Write forces into the trajectory [``True``]
+    timeunit : str (optional)
+        Option to convert values in the 'time' dataset to a custom unit,
+        must be recognizable by MDAnalysis
+    lengthunit : str (optional)
+        Option to convert values in the 'position/value' dataset to a
+        custom unit, must be recognizable by MDAnalysis
+    velocityunit : str (optional)
+        Option to convert values in the 'velocity/value' dataset to a
+        custom unit, must be recognizable by MDAnalysis
+    forceunit : str (optional)
+        Option to convert values in the 'force/value' dataset to a
+        custom unit, must be recognizable by MDAnalysis
+    author : str (optional)
+        Name of the author of the file
+    author_email : str (optional)
+        Email of the author of the file
+    creator : str (optional)
+        Software that wrote the file [``MDAnalysis``]
+    creator_version : str (optional)
+        Version of software that wrote the file
+        [:attr:`MDAnalysis.__version__`]
+
+    Raises
+    ------
+    RuntimeError
+        when ``Zarr`` is not installed
+    ValueError
+        when ``n_atoms`` is 0
+    ValueError
+        when ``n_frames`` is not provided
+    ValueError
+        when 'positions`, 'velocities', and 'forces' are all set to ``False``
+    ValueError
+        when a unit is not recognized by MDAnalysis
+    TypeError
+        when the input object is not a :class:`Universe` or
+        :class:`AtomGroup`
+    ValueError
+        when any of the optional `timeunit`, `lengthunit`,
+        `velocityunit`, or `forceunit` keyword arguments are
+        not recognized by MDAnalysis
+    ValueError
+        when ``convert_units`` is set to ``True`` but the trajectory
+        being written has no units
+    NoDataError
+        when a timestep being written contains positions but no dimensions
+        or vice versa
+    """
 
     format = "ZARRMD"
     multiframe = True
@@ -954,6 +1062,9 @@ class ZARRMDWriter(base.WriterBase):
         self._elements = dict()
 
         self.filename = filename
+
+        if not HAS_ZARR:
+            raise RuntimeError("Please install zarr")
         if n_atoms == 0:
             raise ValueError("H5MDWriter: no atoms in output trajectory")
 
@@ -1043,10 +1154,9 @@ class ZARRMDWriter(base.WriterBase):
         lengthunit, velocityunit, forceunit)`` to the writer so long as
         MDAnalysis has a conversion factor for it (:exc:`ValueError` raised if
         it does not). These custom unit arguments must be in
-        `MDAnalysis notation`_. If custom units are supplied from the user,
+        MDAnalysis notation. If custom units are supplied from the user,
         :attr`self.units[unit]` is replaced with the corresponding
         `unit` argument.
-
         """
 
         self.units = ag.universe.trajectory.units.copy()
@@ -1076,7 +1186,6 @@ class ZARRMDWriter(base.WriterBase):
                 )
 
     def _open_file(self):
-
         storage_options = (
             dict() if self.storage_options is None else self.storage_options
         )
@@ -1096,20 +1205,6 @@ class ZARRMDWriter(base.WriterBase):
         self._file["h5md/creator"].attrs["version"] = self.creator_version
 
     def _initialize_zarrmd_file(self, ts):
-        """initializes all datasets that will be written to by
-        :meth:`_write_next_timestep`
-
-        Note
-        ----
-        :exc:`NoDataError` is raised if no positions, velocities, or forces are
-        found in the input trajectory. While the H5MD standard allows for this
-        case, :class:`H5MDReader` cannot currently read files without at least
-        one of these three groups. A future change to both the reader and
-        writer will allow this case.
-
-
-        """
-
         # for keeping track of where to write in the dataset
         self._counter = 0
 
@@ -1244,7 +1339,7 @@ class ZARRMDWriter(base.WriterBase):
 
         Note
         ----
-        Writing H5MD files with fancy trajectory slicing where the Timestep
+        Writing H5MD-formatted files with fancy trajectory slicing where the Timestep
         does not increase monotonically such as ``u.trajectory[[2,1,0]]``
         or ``u.trajectory[[0,1,2,0,1,2]]`` raises a :exc:`ValueError` as this
         violates the rules of the step dataset in the H5MD standard.
@@ -1286,6 +1381,12 @@ class ZARRMDWriter(base.WriterBase):
                 else self.convert_pos_to_native(ts.positions)
             )
             self._elements["position"].write(pos, curr_step, curr_time)
+
+            if ts.dimensions is None and "box/edges" in self._elements:
+                raise NoDataError(
+                    "H5MD requires that positions and box dimensions are "
+                    "sampled at the same rate. No dimensions found in Timestep."
+                )
 
         if ts.has_velocities and "velocity" in self._elements:
             vel = (
@@ -1355,7 +1456,7 @@ class ZarrNoCache(FrameCache):
         self._stepmaps = stepmaps
 
     def load_frame(self):
-        """Reader responsbile for raising StopIteration when no more frames"""
+        """Reader responsible for raising StopIteration when no more frames"""
         frame = self._frame_seq.popleft()
         self._load_timestep_frame(frame)
         return frame
