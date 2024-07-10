@@ -3,6 +3,9 @@ import zarr
 import os
 import boto3
 import s3fs
+import MDAnalysis as mda
+import numcodecs
+import numpy as np
 
 import pytest
 from botocore.exceptions import ClientError
@@ -380,3 +383,53 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
             else:
                 with pytest.raises(TypeError):
                     ref.writer("foo")
+
+
+class TestH5MDFmtWriterNumcodecs:
+    @pytest.fixture()
+    def universe(self):
+        return mda.Universe(TPR_xvf, H5MD_xvf)
+
+    def test_write_compressor_filters(self, universe, tmpdir):
+        outfile = "write-compressor-test.zarrmd"
+        with tmpdir.as_cwd():
+            with mda.Writer(
+                outfile,
+                universe.atoms.n_atoms,
+                n_frames=universe.trajectory.n_frames,
+                compressor=numcodecs.Blosc(cname="zstd", clevel=7),
+                precision=3,
+            ) as w:
+                for ts in universe.trajectory:
+                    w.write(universe)
+            written = zarr.open_group(outfile, mode="r")
+
+            particle_group_elems = [
+                "position",
+                "velocity",
+                "force",
+                "box/edges",
+            ]
+            particle_group_elems = [
+                "/particles/trajectory/" + elem for elem in particle_group_elems
+            ]
+            obsv_elems = ["/observables/trajectory/lambda"]
+            particle_group_elems.extend(obsv_elems)
+            for h5mdelem_path in particle_group_elems:
+                assert written[h5mdelem_path][
+                    "value"
+                ].compressor == numcodecs.Blosc(cname="zstd", clevel=7)
+                assert written[h5mdelem_path]["value"].filters == [
+                    numcodecs.Quantize(
+                        3, dtype=written[h5mdelem_path]["value"].dtype
+                    )
+                ]
+                assert written[h5mdelem_path][
+                    "time"
+                ].compressor == numcodecs.Blosc(cname="zstd", clevel=7)
+                assert written[h5mdelem_path]["time"].filters == [
+                    numcodecs.Quantize(3, np.float32)
+                ]
+                assert written[h5mdelem_path][
+                    "step"
+                ].compressor == numcodecs.Blosc(cname="zstd", clevel=7)

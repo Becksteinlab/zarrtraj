@@ -103,6 +103,7 @@ import logging
 
 try:
     import zarr
+    import numcodecs
 except ImportError:
     HAS_ZARR = False
 
@@ -797,7 +798,15 @@ class ZARRH5MDReader(base.ReaderBase):
 
 class H5MDElementBuffer:
     def __init__(
-        self, shape, dtype, n_frames, elem_grp, val_unit=None, t_unit=None
+        self,
+        shape,
+        dtype,
+        n_frames,
+        elem_grp,
+        val_unit=None,
+        t_unit=None,
+        compressor="default",
+        precision=None,
     ):
         """We don't actually know that this element will be written
         at every frame, but, n_frames is a max length for the buffer
@@ -813,6 +822,11 @@ class H5MDElementBuffer:
         self._val_idx = 0
         self._t_idx = 0
 
+        val_filter = None
+        time_filter = None
+        if precision is not None:
+            val_filter = [numcodecs.quantize.Quantize(precision, dtype)]
+            time_filter = [numcodecs.quantize.Quantize(precision, np.float32)]
         bytes_per_frame = (
             np.prod(shape, dtype=np.int32) * np.dtype(dtype).itemsize
         )
@@ -825,11 +839,14 @@ class H5MDElementBuffer:
         # If the dataset is smaller than 12MB, just write it all at once
         self._val_chunks = tuple((self._val_frames_per_chunk, *shape))
         self._val_buf = np.empty(self._val_chunks, dtype=dtype)
-        # NOTE: Add compressor and filters
-        elem_grp["value"] = zarr.empty(
+
+        elem_grp.empty(
+            "value",
             shape=self._val_chunks,
             chunks=self._val_chunks,
             dtype=dtype,
+            compressor=compressor,
+            filters=val_filter,
         )
         self._val = elem_grp["value"]
         if val_unit is not None:
@@ -840,16 +857,24 @@ class H5MDElementBuffer:
         self._t_chunks = (self._t_frames_per_chunk,)
 
         self._t_buf = np.empty(self._t_chunks, dtype=np.float32)
-        elem_grp["time"] = zarr.empty(
-            shape=self._t_chunks, chunks=self._t_chunks, dtype=np.float32
+        elem_grp.empty(
+            "time",
+            shape=self._t_chunks,
+            chunks=self._t_chunks,
+            dtype=np.float32,
+            compressor=compressor,
+            filters=time_filter,
         )
         self._t = elem_grp["time"]
         if t_unit is not None:
             self._t.attrs["unit"] = t_unit
 
         self._s_buf = np.empty(self._t_chunks, dtype=np.int32)
-        elem_grp["step"] = zarr.empty(
-            shape=self._t_chunks, chunks=self._t_chunks, dtype=np.int32
+        elem_grp.empty("step",
+            shape=self._t_chunks,
+            chunks=self._t_chunks,
+            dtype=np.int32,
+            compressor=compressor,
         )
         self._s = elem_grp["step"]
 
@@ -916,6 +941,11 @@ class ZARRMDWriter(base.WriterBase):
         number of atoms in the system
     n_frames : int
         number of frames to be written in the output trajectory
+    compressor : numcodecs.Codec (optional)
+        compressor to use for the Zarr datasets. Will be applied to all datasets
+    precision : int (optional)
+        applies the numcodecs.Quantize filter to Zarr datasets.
+        Will be applied to all floating point datasets
     storage_options : dict (optional)
         options to pass to the storage backend via ``fsspec``
     convert_units : bool (optional)
@@ -956,6 +986,8 @@ class ZARRMDWriter(base.WriterBase):
         when ``n_atoms`` is 0
     ValueError
         when ``n_frames`` is not provided
+    ValueError
+        when ``precision`` is less than 0
     ValueError
         when 'positions`, 'velocities', and 'forces' are all set to ``False``
     ValueError
@@ -1043,6 +1075,8 @@ class ZARRMDWriter(base.WriterBase):
         filename,
         n_atoms,
         n_frames=None,
+        compressor="default",
+        precision=None,
         storage_options=None,
         convert_units=True,
         positions=True,
@@ -1062,6 +1096,10 @@ class ZARRMDWriter(base.WriterBase):
         self._elements = dict()
 
         self.filename = filename
+        self.compressor = compressor
+        if precision is not None and precision < 0:
+            raise ValueError("Precision must be greater than or equal to 0")
+        self.prec = precision
 
         if not HAS_ZARR:
             raise RuntimeError("Please install zarr")
@@ -1260,6 +1298,8 @@ class ZARRMDWriter(base.WriterBase):
                 self._traj["box/edges"],
                 val_unit=length_unit,
                 t_unit=t_unit,
+                compressor=self.compressor,
+                precision=self.prec,
             )
 
         if (
@@ -1275,6 +1315,8 @@ class ZARRMDWriter(base.WriterBase):
                 self._traj["position"],
                 val_unit=length_unit,
                 t_unit=t_unit,
+                compressor=self.compressor,
+                precision=self.prec,
             )
 
         if (
@@ -1290,6 +1332,8 @@ class ZARRMDWriter(base.WriterBase):
                 self._traj["velocity"],
                 val_unit=vel_unit,
                 t_unit=t_unit,
+                compressor=self.compressor,
+                precision=self.prec,
             )
 
         if (
@@ -1305,6 +1349,8 @@ class ZARRMDWriter(base.WriterBase):
                 self._traj["force"],
                 val_unit=force_unit,
                 t_unit=t_unit,
+                compressor=self.compressor,
+                precision=self.prec,
             )
 
         for obsv, value in ts.data.items():
@@ -1325,6 +1371,8 @@ class ZARRMDWriter(base.WriterBase):
                     self.n_frames,
                     self._obsv[obsv],
                     t_unit=self.units["time"],
+                    compressor=self.compressor,
+                    precision=self.prec,
                 )
 
     def _write_next_timestep(self, ts):
