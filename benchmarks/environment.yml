@@ -1,0 +1,15 @@
+name: asv-zarrtraj
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - MDAnalysis>=2.7.0
+  - zarr>=2.11.0
+  - dask
+  - distributed
+
+  ### AWS dependencies ###
+  - s3fs=2024.3.0 
+
+
+
