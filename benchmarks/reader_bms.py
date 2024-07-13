@@ -1,19 +1,21 @@
 from zarrtraj import *
+import MDAnalysis as mda
 
-# from asv_runner.benchmarks.mark import skip_for_params
 from zarr.storage import DirectoryStore, LRUStoreCache
 import MDAnalysis.analysis.rms as rms
 from MDAnalysis.coordinates.H5MD import H5MDReader
+import zarr
+import h5py
+import dask as da
 
 import os
 
-"""
-Note: while h5md files are chunked at (1, n_atoms, 3), zarr files
-are chunked with as many frames as can fit in 12MB
-
-"""
 
 BENCHMARK_DATA_DIR = os.getenv("BENCHMARK_DATA_DIR")
+os.environ["S3_REGION_NAME"] = "us-west-1"
+os.environ["AWS_PROFILE"] = "sample_profile"
+
+
 s3_files = [
     "s3://zarrtraj-test-data/yiip_aligned_compressed.zarrmd",
     "s3://zarrtraj-test-data/yiip_aligned_uncompressed.zarrmd",
@@ -32,8 +34,14 @@ h5md_files = [
     f"{BENCHMARK_DATA_DIR}/yiip_aligned_uncompressed.h5md",
 ]
 
-os.environ["S3_REGION_NAME"] = "us-west-1"
-os.environ["AWS_PROFILE"] = "sample_profile"
+
+def dask_rmsf(positions):
+    mean_positions = positions.mean(axis=0)
+    subtracted_positions = positions - mean_positions
+    squared_deviations = subtracted_positions**2
+    avg_squared_deviations = squared_deviations.mean(axis=0)
+    sqrt_avg_squared_deviations = da.sqrt(avg_squared_deviations)
+    return da.sqrt((sqrt_avg_squared_deviations**2).sum(axis=1))
 
 
 class ZARRH5MDDiskStrideTime(object):
@@ -84,44 +92,68 @@ class H5MDReadersDiskStrideTime(object):
 class H5MDFmtDiskRSMFTime(object):
     """Benchmarks for zarrtraj file striding."""
 
-    params = (local_files, ""
-    param_names = ["filename"]
+    params = (local_files, ["dask", "mda"])
+    param_names = ["filename", "method"]
 
-    def setup(self, filename):
-        self.reader_object = ZARRH5MDReader(filename)
+    def setup(self, filename, method):
+        if method == "dask":
+            if filename.endswith(".h5md"):
+                self.positions = da.from_array(
+                    h5py.File(filename)["/particles/trajectory/position/value"]
+                )
 
-    def time_strides(self, filename):
+            elif filename.endswith("zarrmd"):
+                self.positions = da.from_array(
+                    zarr.open_group(filename)[
+                        "/particles/trajectory/position/value"
+                    ]
+                )
+
+        elif method == "mda":
+            self.universe = mda.Universe(
+                f"{BENCHMARK_DATA_DIR}/yiip_equilibrium/YiiP_system.pdb",
+                filename,
+            )
+
+    def time_rmsf(self, filename, method):
         """Benchmark striding over full trajectory"""
-        for ts in self.reader_object:
-            pass
-
-    # def time_RMSD(self, compressor_level, filter_precision, chunk_frames):
-    #    """Benchmark RMSF calculation"""
-    #    R = rms.RMSD(
-    #        self.universe,
-    #        self.universe,
-    #        select="backbone",
-    #        ref_frame=0,
-    #    ).run()
+        if method == "mda":
+            rms.RMSF(self.universe.atoms).run()
+        elif method == "dask":
+            rmsf = dask_rmsf(self.positions)
+            rmsf.compute()
 
 
-class RawZarrReadBenchmarks(object):
-    timeout = 86400
-    params = (
-        [0, 1, 9],
-        ["all", 3],
-        [1, 10, 100],
-    )
+class H5MDFmtAWSRSMFTime(object):
+    """Benchmarks for zarrtraj file striding."""
 
-    param_names = [
-        "compressor_level",
-        "filter_precision",
-        "chunk_frames",
-    ]
+    params = (s3_files, ["dask", "mda"])
+    param_names = ["filename", "method"]
 
-    def setup(self, compressor_level, filter_precision, chunk_frames):
-        self.traj_file = f"s3://zarrtraj-test-data/long_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
-        store = zarr.storage.FSStore(url=self.traj_file, mode="r")
-        # For consistency with zarrtraj defaults, use 256MB LRUCache store
-        cache = zarr.storage.LRUStoreCache(store, max_size=2**28)
-        self.zarr_group = zarr.open_group(store=cache, mode="r")
+    def setup(self, filename, method):
+        if method == "dask":
+            if filename.endswith(".h5md"):
+                self.positions = da.from_array(
+                    h5py.File(filename)["/particles/trajectory/position/value"]
+                )
+
+            elif filename.endswith(".zarrmd"):
+                self.positions = da.from_array(
+                    zarr.open_group(filename)[
+                        "/particles/trajectory/position/value"
+                    ]
+                )
+
+        elif method == "mda":
+            self.universe = mda.Universe(
+                f"{BENCHMARK_DATA_DIR}/yiip_equilibrium/YiiP_system.pdb",
+                filename,
+            )
+
+    def time_rmsf(self, filename, method):
+        """Benchmark striding over full trajectory"""
+        if method == "mda":
+            rms.RMSF(self.universe.atoms)
+        elif method == "dask":
+            rmsf = dask_rmsf(self.positions)
+            rmsf.compute()
