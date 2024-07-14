@@ -36,7 +36,7 @@ argument::
     os.environ["AWS_PROFILE"] = "sample_profile"
     os.environ["AWS_REGION"] = "us-west-1"
 
-    u = mda.Universe("topology.tpr", "s3://sample-bucket/trajectory.zarrmd")
+    u = mda.Universe("topology.tpr", "s3://sample-bucket/trajectory.h5md")
 
 AWS provides a VSCode extension to manage AWS authentication profiles
 `here <https://aws.amazon.com/visualstudiocode/>`_.
@@ -188,6 +188,8 @@ class ZARRH5MDReader(base.ReaderBase):
             trajectory filename or URL
         convert_units : bool (optional)
             convert units to MDAnalysis units
+        storage_options : dict (optional)
+            options to pass to the storage backend via ``fsspec``
         group : str (optional)
             group in 'particles' to read from. Not required if only one group
             is present in 'particles'
@@ -870,7 +872,8 @@ class H5MDElementBuffer:
             self._t.attrs["unit"] = t_unit
 
         self._s_buf = np.empty(self._t_chunks, dtype=np.int32)
-        elem_grp.empty("step",
+        elem_grp.empty(
+            "step",
             shape=self._t_chunks,
             chunks=self._t_chunks,
             dtype=np.int32,
