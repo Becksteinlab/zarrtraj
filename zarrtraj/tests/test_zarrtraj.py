@@ -51,14 +51,9 @@ def upload_h5md_testfile(file_name):
 
 
 def upload_zarrmd_testfile(file_name):
-    source = zarr.open_group(file_name, mode="r")
     obj_name = os.path.basename(file_name)
     s3_fs = s3fs.S3FileSystem()
-    cloud_store = s3fs.S3Map(
-        root=f"s3://zarrtraj-test-data/{obj_name}", s3=s3_fs
-    )
-
-    zarr.convenience.copy_store(source.store, cloud_store, if_exists="raise")
+    s3_fs.put(file_name, "zarrtraj-test-data/" + obj_name, recursive=True)
 
     return True
 
