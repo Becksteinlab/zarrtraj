@@ -22,11 +22,11 @@ from dask.distributed import Client, LocalCluster
 
 Development:
 
-    asv run -q -v -e benchmarks-dev > bm.log &
+    asv run -q -v -e <commit> > bm.log &
 
 Full run:
 
-    asv run -v -e benchmarks-dev > bm.log &
+    asv run -v -e <commit> > bm.log &
 
 4. To publish, use
 
@@ -59,6 +59,11 @@ h5md_files = [
 s3_zarrmd_files = [
     "s3://zarrtraj-test-data/yiip_aligned_compressed.zarrmd",
     "s3://zarrtraj-test-data/yiip_aligned_uncompressed.zarrmd",
+]
+
+local_zarrmd_files = [
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_compressed.zarrmd",
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_uncompressed.zarrmd",
 ]
 
 
@@ -130,7 +135,7 @@ class H5MDReadersDiskStrideTime(object):
 
 class H5MDFmtDiskRMSFTime(object):
 
-    params = (local_files, ["dask", "mda"])
+    params = (local_zarrmd_files, ["dask", "mda"])
     param_names = ["filename", "method"]
     timeout = 2400.0
 

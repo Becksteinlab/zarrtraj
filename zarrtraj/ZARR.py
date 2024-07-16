@@ -986,7 +986,7 @@ class ZARRMDWriter(base.WriterBase):
     ValueError
         when ``n_atoms`` is 0
     ValueError
-        when ``n_frames`` is not provided
+        when ``n_frames`` is not provided or negative
     ValueError
         when ``precision`` is less than 0
     ValueError
@@ -1108,10 +1108,9 @@ class ZARRMDWriter(base.WriterBase):
             raise ValueError("H5MDWriter: no atoms in output trajectory")
 
         self.n_atoms = n_atoms
-        if not n_frames:
+        if n_frames is None or n_frames < 0:
             raise ValueError(
-                "H5MDWriter: no frames in output trajectory. "
-                "Please provide a nonzero value for 'n_frames' kwarg"
+                "H5MDWriter: Please provide a non-negative value for 'n_frames' kwarg"
             )
         self.n_frames = n_frames
         self.storage_options = storage_options
