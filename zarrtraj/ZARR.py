@@ -36,7 +36,7 @@ argument::
     os.environ["AWS_PROFILE"] = "sample_profile"
     os.environ["AWS_REGION"] = "us-west-1"
 
-    u = mda.Universe("topology.tpr", "s3://sample-bucket/trajectory.zarrmd")
+    u = mda.Universe("topology.tpr", "s3://sample-bucket/trajectory.h5md")
 
 AWS provides a VSCode extension to manage AWS authentication profiles
 `here <https://aws.amazon.com/visualstudiocode/>`_.
@@ -188,6 +188,8 @@ class ZARRH5MDReader(base.ReaderBase):
             trajectory filename or URL
         convert_units : bool (optional)
             convert units to MDAnalysis units
+        storage_options : dict (optional)
+            options to pass to the storage backend via ``fsspec``
         group : str (optional)
             group in 'particles' to read from. Not required if only one group
             is present in 'particles'
@@ -871,7 +873,8 @@ class H5MDElementBuffer:
             self._t.attrs["unit"] = t_unit
 
         self._s_buf = np.empty(self._t_chunks, dtype=np.int32)
-        elem_grp.empty("step",
+        elem_grp.empty(
+            "step",
             shape=self._t_chunks,
             chunks=self._t_chunks,
             dtype=np.int32,
@@ -887,7 +890,10 @@ class H5MDElementBuffer:
     ):
         # flush buffer and extend zarr dset if reached end of chunk
         # this will never be called if n_frames is less than the chunk size
-        if self._val_idx != 0 and self._val_idx % self._val_frames_per_chunk == 0:
+        if (
+            self._val_idx != 0
+            and self._val_idx % self._val_frames_per_chunk == 0
+        ):
             self._val[self._val_idx - self._val_frames_per_chunk :] = (
                 self._val_buf[:]
             )
@@ -914,19 +920,20 @@ class H5MDElementBuffer:
         and shink the zarr datasets to the correct size.
         """
         self._val[
-            self._val_idx - (self._val_idx % (self._val_frames_per_chunk + 1)) : self._val_idx
-        ] = self._val_buf[
-            : (self._val_idx % (self._val_frames_per_chunk + 1))
-        ]
+            self._val_idx
+            - (self._val_idx % (self._val_frames_per_chunk + 1)) : self._val_idx
+        ] = self._val_buf[: (self._val_idx % (self._val_frames_per_chunk + 1))]
         self._val.resize(self._val_idx, *self._val_chunks[1:])
 
-        self._t[self._t_idx - (self._t_idx % (self._t_frames_per_chunk + 1)) : self._t_idx] = (
-            self._t_buf[: (self._t_idx % (self._t_frames_per_chunk + 1))]
-        )
+        self._t[
+            self._t_idx
+            - (self._t_idx % (self._t_frames_per_chunk + 1)) : self._t_idx
+        ] = self._t_buf[: (self._t_idx % (self._t_frames_per_chunk + 1))]
         self._t.resize(self._t_idx)
-        self._s[self._t_idx - (self._t_idx % (self._t_frames_per_chunk + 1)) : self._t_idx] = (
-            self._s_buf[: (self._t_idx % (self._t_frames_per_chunk + 1))]
-        )
+        self._s[
+            self._t_idx
+            - (self._t_idx % (self._t_frames_per_chunk + 1)) : self._t_idx
+        ] = self._s_buf[: (self._t_idx % (self._t_frames_per_chunk + 1))]
         self._s.resize(self._t_idx)
 
 
@@ -1274,10 +1281,10 @@ class ZARRMDWriter(base.WriterBase):
             and "box/edges" not in self._elements
         ):
             length_unit = (
-            self._unit_translation_dict["length"][self.units["length"]]
-            if self.units["length"] is not None
-            else None
-        )
+                self._unit_translation_dict["length"][self.units["length"]]
+                if self.units["length"] is not None
+                else None
+            )
             self._traj["box"].attrs["boundary"] = 3 * ["periodic"]
             self._traj["box"].require_group("edges")
             self._elements["box/edges"] = H5MDElementBuffer(
@@ -1297,10 +1304,10 @@ class ZARRMDWriter(base.WriterBase):
             and "position" not in self._elements
         ):
             length_unit = (
-            self._unit_translation_dict["length"][self.units["length"]]
-            if self.units["length"] is not None
-            else None
-        )
+                self._unit_translation_dict["length"][self.units["length"]]
+                if self.units["length"] is not None
+                else None
+            )
             self._traj.require_group("position")
             self._elements["position"] = H5MDElementBuffer(
                 ts.positions.shape,
@@ -1319,10 +1326,10 @@ class ZARRMDWriter(base.WriterBase):
             and "velocity" not in self._elements
         ):
             vel_unit = (
-            self._unit_translation_dict["velocity"][self.units["velocity"]]
-            if self.units["velocity"] is not None
-            else None
-        )
+                self._unit_translation_dict["velocity"][self.units["velocity"]]
+                if self.units["velocity"] is not None
+                else None
+            )
             self._traj.require_group("velocity")
             self._elements["velocity"] = H5MDElementBuffer(
                 ts.velocities.shape,
@@ -1341,10 +1348,10 @@ class ZARRMDWriter(base.WriterBase):
             and "force" not in self._elements
         ):
             force_unit = (
-            self._unit_translation_dict["force"][self.units["force"]]
-            if self.units["force"] is not None
-            else None
-        )
+                self._unit_translation_dict["force"][self.units["force"]]
+                if self.units["force"] is not None
+                else None
+            )
             self._traj.require_group("force")
             self._elements["force"] = H5MDElementBuffer(
                 ts.forces.shape,

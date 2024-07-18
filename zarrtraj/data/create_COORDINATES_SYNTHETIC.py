@@ -10,17 +10,6 @@ import numpy as np
 
 def create_COORDINATES_SYNTHETIC(uni, root):
     n_atoms = uni.atoms.n_atoms
-    # uni.trajectory.ts.dt = 1
-
-    # uni.trajectory.ts.dimensions = orig_box
-    # uni.trajectory.units = {
-    #     "time": "ps",
-    #     "length": "Angstrom",
-    #     "velocity": "Angstrom/ps",
-    #     "force": "kJ/(mol*Angstrom)",
-    # }
-    # print(uni.trajectory)
-    # print(uni.trajectory.ts.__class__)
     h5md = root.create_group("h5md")
     h5md.attrs["version"] = [1, 1]
     author = h5md.create_group("author")
@@ -58,10 +47,10 @@ def create_COORDINATES_SYNTHETIC(uni, root):
     dim["time"].attrs["unit"] = "ps"
 
     pos = pgroup.create_group("position")
-    exp = np.logspace(0, 4, base=2, num=5, dtype=np.int32)
+    exp = np.logspace(0, 4, base=2, num=5, dtype=np.float32)
     pos_data = (
         np.tile(
-            np.arange(3 * n_atoms, dtype=np.int32).reshape(n_atoms, 3),
+            np.arange(3 * n_atoms, dtype=np.float32).reshape(n_atoms, 3),
             (5, 1, 1),
         )
         * exp[:, None, None]
