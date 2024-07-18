@@ -1,28 +1,30 @@
 """
 
-Example: Loading a .zarrmd file from disk
+Example: Loading a .h5md file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To load a simulation from a ``.h5md`` trajectory file, pass a
+topology file and a path to the ``.zarrmd`` file to a
+:class:`~MDAnalysis.core.universe.Universe`::
+
+    import zarrtraj
+    import MDAnalysis as mda
+    u = mda.Universe("topology.tpr", "trajectory.h5md")
+
+The reader can also handle reading from a ``.zarrmd`` file.
 
 ``zarrmd`` files are H5MD-formatted files stored in the Zarr format.
 To learn more, see the `H5MD documentation <https://nongnu.org/h5md/>`_,
 the `Zarr documentation <https://zarr.readthedocs.io/en/stable/>`_,
 and the :ref:`zarrmd format page <zarrmd>`.
 
-To load a simulation from a ``.zarrmd`` trajectory file, pass a
-topology file and a path to the ``.zarrmd`` file to a
-:class:`~MDAnalysis.core.universe.Universe`::
-
-    import zarrtraj
-    import MDAnalysis as mda
-    u = mda.Universe("topology.tpr", "trajectory.zarrmd")
-
-The reader can also handle reading from a .h5md file.
-
 Example: Reading from cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Zarrtraj currently supports reading from .h5md and .zarrmd files stored in
-AWS, Google Cloud, and Azure Block Storage.
+Zarrtraj currently supports reading from ``.h5md`` and ``.zarrmd`` files stored in
+AWS S3 buckets. If you are interested in streaming from and writing to other
+cloud service storage options, please raise an issue on the
+`zarrtraj GitHub <https://github.com/Becksteinlab/zarrtraj>`_.
 
 To read from AWS S3, pass the S3 url path to the file as the trajectory
 argument::
@@ -74,6 +76,27 @@ dataset will be written in a single chunk::
 Note that the `n_frames` argument is required. This is because the writer needs to know
 the number of frames in the output trajectory in order to determine the number of frames per chunk
 for each dataset.
+
+Example: Streaming files via http/https
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Zarrtraj also supports streaming ``.h5md`` and ``.zarrmd`` trajectories via 
+http and https. TO illustrate, you can easily make a local directory's files available 
+via http by using node's `http-server <https://www.npmjs.com/package/http-server>`_::
+
+    http-server zarrtraj/data -p 8080
+
+After this server is running, you can load the trajectory into MDAnalysis like this::
+
+    import zarrtraj
+    import MDAnalysis as mda
+    from MDAnalysisTests.datafiles import COORDINATES_TOPOLOGY
+
+    u = mda.Universe(
+        COORDINATES_TOPOLOGY,
+        "http://localhost:8000/COORDINATES_SYNTHETIC_ZARRMD.zarrmd",
+    )
+
 
 Classes
 ^^^^^^^
@@ -435,9 +458,8 @@ class ZARRH5MDReader(base.ReaderBase):
         """Prepares the correct method for managing the file
         given the protocol"""
         self._protocol = get_protocol(self.filename)
-        if self._protocol == "s3":
+        if self._protocol in ZARRTRAJ_NETWORK_PROTOCOLS:
             self._cache_type = ZarrLRUCache
-            # NOTE: Import correct packages
         elif self._protocol == "file":
             self._cache_type = ZarrNoCache
         else:

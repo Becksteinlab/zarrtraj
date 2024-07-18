@@ -1,6 +1,6 @@
 """
 zarrtraj
-This is a kit that provides the ability to read and write trajectory data in the Zarr file format
+This is a kit that provides the ability to read H5MD trajectory data into MDAnalysis using Zarr
 """
 
 # Add imports here

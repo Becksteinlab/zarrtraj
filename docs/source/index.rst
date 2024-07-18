@@ -10,7 +10,8 @@ Welcome to zarrtraj's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   getting_started
+   installation
+   walkthrough
    api
    zarrmd-file-spec/v0.1.0
    benchmarks

@@ -21,10 +21,11 @@ dependencies = [
     "MDAnalysis>=2.7.0",
     # Earliest zarr version where BaseStore has close() method
     "zarr>=2.11.0", 
-    "dask>=2023.11.0",
+    # Earliest version with preserved_linked_dsets
     "kerchunk>=0.2.6",
+    # Earliest version with visititems_links
     "h5py>=3.11.0",
-    "s3fs==2024.3.0",
+    "s3fs>=2024.3.0",
 ]
 keywords = [
     "molecular simulations",

@@ -43,6 +43,7 @@ class FrameCache(abc.ABC):
         """Call this in the reader's close() method"""
 
 
+# Not yet implemented
 class AsyncFrameCache(FrameCache, threading.Thread):
 
     def __init__(self):

@@ -23,8 +23,8 @@ Build this package from source::
 
     pip install -e <path/to/repo>
 
-Development environment installation
-------------------------------------
+Development installation
+------------------------
 
 After creating and activating a conda environment as described, install 
 the package with documentation and testing dependencies::

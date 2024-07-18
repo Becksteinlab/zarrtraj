@@ -22,11 +22,11 @@ from dask.distributed import Client, LocalCluster
 
 Development:
 
-    asv run -q -v -e <commit> > bm.log &
+    asv run -q -v -e <branch>^! > bm.log &
 
 Full run:
 
-    asv run -v -e <commit> > bm.log &
+    asv run -v -e <branch>^! > bm.log &
 
 4. To publish, use
 
