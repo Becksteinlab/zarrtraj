@@ -24,6 +24,7 @@ dependencies = [
     "dask>=2023.11.0",
     "kerchunk>=0.2.6",
     "h5py>=3.11.0",
+    "s3fs==2024.3.0",
 ]
 keywords = [
     "molecular simulations",
@@ -38,7 +39,6 @@ test = [
     "pytest-xdist>=3.5.0",
     "pytest-cov>=4.1.0",
     "MDAnalysisTests>=2.7.0",
-    "s3fs==2024.3.0",
 ]
 doc = [
     "sphinx",

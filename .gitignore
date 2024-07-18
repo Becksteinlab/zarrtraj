@@ -114,3 +114,6 @@ poetry.lock
 # benchmark stuff
 benchmarks/.asv
 benchmarks/testfiles/
+
+# debugging
+tmp

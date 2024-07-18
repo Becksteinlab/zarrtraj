@@ -1,106 +1,203 @@
 from zarrtraj import *
+import MDAnalysis as mda
 
-# from asv_runner.benchmarks.mark import skip_for_params
 from zarr.storage import DirectoryStore, LRUStoreCache
 import MDAnalysis.analysis.rms as rms
+from MDAnalysis.coordinates.H5MD import H5MDReader
+import zarr
+import h5py
+import dask.array as da
 
 import os
 
-BENCHMARK_DATA_DIR = os.getenv("BENCHMARK_DATA_DIR")
+from dask.distributed import Client, LocalCluster
 
+
+"""
+1. Activate the devtools/asv_env.yaml environment
+
+2. Make sure to set the BENCHMARK_DATA_DIR to wherever local yiip files are stored
+
+3. To run, use:
+
+Development:
+
+    asv run -q -v -e <commit> > bm.log &
+
+Full run:
+
+    asv run -v -e <commit> > bm.log &
+
+4. To publish, use
+
+
+"""
+
+BENCHMARK_DATA_DIR = os.getenv("BENCHMARK_DATA_DIR")
 os.environ["S3_REGION_NAME"] = "us-west-1"
 os.environ["AWS_PROFILE"] = "sample_profile"
 
 
-class TrajReaderDiskBenchmarks(object):
-    """Benchmarks for zarrtraj file striding."""
+s3_files = [
+    "s3://zarrtraj-test-data/yiip_aligned_compressed.zarrmd",
+    "s3://zarrtraj-test-data/yiip_aligned_uncompressed.zarrmd",
+    "s3://zarrtraj-test-data/yiip_aligned_compressed.h5md",
+    "s3://zarrtraj-test-data/yiip_aligned_uncompressed.h5md",
+]
+local_files = [
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_compressed.zarrmd",
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_uncompressed.zarrmd",
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_compressed.h5md",
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_uncompressed.h5md",
+]
 
-    params = (
-        [0, 1, 9],
-        ["all", 3],
-        [1, 10, 50],
-    )
-    param_names = [
-        "compressor_level",
-        "filter_precision",
-        "chunk_frames",
-    ]
+h5md_files = [
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_compressed.h5md",
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_uncompressed.h5md",
+]
 
-    def setup(
-        self,
-        compressor_level,
-        filter_precision,
-        chunk_frames,
-    ):
-        self.traj_file = f"{BENCHMARK_DATA_DIR}/short_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
-        self.reader_object = ZarrTrajReader(self.traj_file)
+s3_zarrmd_files = [
+    "s3://zarrtraj-test-data/yiip_aligned_compressed.zarrmd",
+    "s3://zarrtraj-test-data/yiip_aligned_uncompressed.zarrmd",
+]
 
-    def time_strides(
-        self,
-        compressor_level,
-        filter_precision,
-        chunk_frames,
-    ):
+local_zarrmd_files = [
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_compressed.zarrmd",
+    f"{BENCHMARK_DATA_DIR}/yiip_aligned_uncompressed.zarrmd",
+]
+
+
+def dask_rmsf(positions):
+    mean_positions = positions.mean(axis=0)
+    subtracted_positions = positions - mean_positions
+    squared_deviations = subtracted_positions**2
+    avg_squared_deviations = squared_deviations.mean(axis=0)
+    sqrt_avg_squared_deviations = da.sqrt(avg_squared_deviations)
+    return da.sqrt((sqrt_avg_squared_deviations**2).sum(axis=1))
+
+
+class ZARRH5MDDiskStrideTime(object):
+    """Benchmarks for zarrmd and h5md file striding using local files."""
+
+    params = local_files
+    param_names = ["filename"]
+    timeout = 2400.0
+
+    def setup(self, filename):
+        self.reader_object = ZARRH5MDReader(filename)
+
+    def time_strides(self, filename):
         """Benchmark striding over full trajectory"""
         for ts in self.reader_object:
             pass
 
+    def teardown(self, filename):
+        del self.reader_object
 
-class TrajReaderAWSBenchmarks(object):
-    timeout = 86400
-    params = (
-        [0, 1, 9],
-        ["all", 3],
-        [10, 100],
-    )
 
-    param_names = [
-        "compressor_level",
-        "filter_precision",
-        "chunk_frames",
-    ]
+class ZARRH5MDS3StrideTime(object):
+    """Benchmarks for zarrmd and h5md file striding using local files."""
 
-    def setup(self, compressor_level, filter_precision, chunk_frames):
-        self.traj_file = f"s3://zarrtraj-test-data/long_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
-        self.reader_object = ZarrTrajReader(
-            self.traj_file,
-        )
-        # self.universe = mda.Universe(
-        #    f"{BENCHMARK_DATA_DIR}/YiiP_system.pdb", self.traj_file
-        # )
+    params = s3_files
+    param_names = ["filename"]
+    timeout = 2400.0
 
-    def time_strides(self, compressor_level, filter_precision, chunk_frames):
+    def setup(self, filename):
+        self.reader_object = ZARRH5MDReader(filename)
+
+    def time_strides(self, filename):
         """Benchmark striding over full trajectory"""
         for ts in self.reader_object:
             pass
 
-    # def time_RMSD(self, compressor_level, filter_precision, chunk_frames):
-    #    """Benchmark RMSF calculation"""
-    #    R = rms.RMSD(
-    #        self.universe,
-    #        self.universe,
-    #        select="backbone",
-    #        ref_frame=0,
-    #    ).run()
+    def teardown(self, filename):
+        del self.reader_object
 
 
-class RawZarrReadBenchmarks(object):
-    timeout = 86400
-    params = (
-        [0, 1, 9],
-        ["all", 3],
-        [1, 10, 100],
-    )
+class H5MDReadersDiskStrideTime(object):
+    """Benchmarks for zarrmd and h5md file striding using local files."""
 
-    param_names = [
-        "compressor_level",
-        "filter_precision",
-        "chunk_frames",
-    ]
+    params = (h5md_files, [ZARRH5MDReader, H5MDReader])
+    param_names = ["filename", "reader"]
+    timeout = 2400.0
 
-    def setup(self, compressor_level, filter_precision, chunk_frames):
-        self.traj_file = f"s3://zarrtraj-test-data/long_{compressor_level}_{filter_precision}_{chunk_frames}.zarrtraj"
-        store = zarr.storage.FSStore(url=self.traj_file, mode="r")
-        # For consistency with zarrtraj defaults, use 256MB LRUCache store
-        cache = zarr.storage.LRUStoreCache(store, max_size=2**28)
-        self.zarr_group = zarr.open_group(store=cache, mode="r")
+    def setup(self, filename, reader):
+        self.reader_object = reader(filename)
+
+    def time_strides(self, filename, reader):
+        """Benchmark striding over full trajectory"""
+        for ts in self.reader_object:
+            pass
+
+    def teardown(self, filename, reader):
+        del self.reader_object
+
+
+class H5MDFmtDiskRMSFTime(object):
+
+    params = (local_zarrmd_files, ["dask", "mda"])
+    param_names = ["filename", "method"]
+    timeout = 2400.0
+
+    def setup(self, filename, method):
+        if method == "dask":
+            self.positions = da.from_array(
+                zarr.open_group(filename)[
+                    "/particles/trajectory/position/value"
+                ]
+            )
+
+        elif method == "mda":
+            self.universe = mda.Universe(
+                f"{BENCHMARK_DATA_DIR}/yiip_equilibrium/YiiP_system.pdb",
+                filename,
+            )
+
+    def time_rmsf(self, filename, method):
+        """Benchmark striding over full trajectory"""
+        if method == "mda":
+            rms.RMSF(self.universe.atoms).run()
+        elif method == "dask":
+            rmsf = dask_rmsf(self.positions)
+            rmsf.compute()
+
+    def teardown(self, filename, method):
+        if hasattr(self, "positions"):
+            del self.positions
+        if hasattr(self, "universe"):
+            del self.universe
+
+
+class H5MDFmtAWSRMSFTime(object):
+
+    params = (s3_zarrmd_files, ["dask", "mda"])
+    param_names = ["filename", "method"]
+    timeout = 2400.0
+
+    def setup(self, filename, method):
+        if method == "dask":
+            self.positions = da.from_array(
+                zarr.open_group(filename)[
+                    "/particles/trajectory/position/value"
+                ]
+            )
+
+        elif method == "mda":
+            self.universe = mda.Universe(
+                f"{BENCHMARK_DATA_DIR}/yiip_equilibrium/YiiP_system.pdb",
+                filename,
+            )
+
+    def time_rmsf(self, filename, method):
+        """Benchmark striding over full trajectory"""
+        if method == "mda":
+            rms.RMSF(self.universe.atoms).run()
+        elif method == "dask":
+            rmsf = dask_rmsf(self.positions)
+            rmsf.compute()
+
+    def teardown(self, filename, method):
+        if hasattr(self, "positions"):
+            del self.positions
+        if hasattr(self, "universe"):
+            del self.universe
