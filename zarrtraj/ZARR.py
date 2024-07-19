@@ -115,10 +115,9 @@ from MDAnalysis.coordinates import base, core
 from MDAnalysis.exceptions import NoDataError
 from MDAnalysis.due import due, Doi
 from MDAnalysis.lib.util import store_init_arguments
-import dask.array as da
 from enum import Enum
 from .utils import *
-from .cache import FrameCache, AsyncFrameCache
+from .cache import FrameCache
 import collections
 import numbers
 import logging

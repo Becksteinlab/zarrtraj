@@ -14,6 +14,10 @@ With conda
 
 Ensure that you have `conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html>`_ installed.
 
+Clone the repository::
+
+    git clone https://github.com/Becksteinlab/zarrtraj.git .
+
 Create a virtual environment and activate it::
 
     conda create --name zarrtraj
