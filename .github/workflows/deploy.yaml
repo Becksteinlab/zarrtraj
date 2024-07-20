@@ -79,8 +79,6 @@ jobs:
           retention-days: 7
 
   upload_testpypi_zarrtraj:
-    if: github.repository == 'Becksteinlab/zarrtraj' &&
-        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/package'))
     name: testpypi_upload_zarrtraj
     environment:
       name: publisher
@@ -102,9 +100,6 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
  
   upload_pypi_zarrtraj:
-    if: | 
-      github.repository == 'Becksteinlab/zarrtraj' &&
-      (github.event_name == 'release' && github.event.action == 'published')
     name: pypi_upload_zarrtraj
     environment:
       name: publisher
