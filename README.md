@@ -26,6 +26,12 @@ Zarrtraj can read local H5MD files, H5MD files in S3 buckets, and files served v
 It can read both [H5MD-formatted files stored in hdf5](https://www.nongnu.org/h5md/h5md.html) and [H5MD-formatted files stored 
 in Zarr](https://zarrtraj.readthedocs.io/en/latest/zarrmd-file-spec/v0.1.0.html) (.zarrmd files).
 
+Zarrtraj is installable via pip and conda availability is coming soon.
+
+```bash
+pip install zarrtraj
+```
+
 For more information on installation and usage, see the [zarrtraj documentation](https://zarrtraj.readthedocs.io/en/latest/index.html)
 
 zarrtraj is bound by a [Code of Conduct](https://github.com/Becksteinlab/zarrtraj/blob/main/CODE_OF_CONDUCT.md).
