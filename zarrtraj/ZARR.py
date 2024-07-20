@@ -11,7 +11,7 @@ topology file and a path to the ``.zarrmd`` file to a
     import MDAnalysis as mda
     u = mda.Universe("topology.tpr", "trajectory.h5md")
 
-The reader can also handle reading from a ``.zarrmd`` file.
+The reader can also read ``.zarrmd`` files from disk.
 
 ``zarrmd`` files are H5MD-formatted files stored in the Zarr format.
 To learn more, see the `H5MD documentation <https://nongnu.org/h5md/>`_,
@@ -52,7 +52,7 @@ AWS provides a VSCode extension to manage AWS authentication profiles
 Example: Writing directly to cloud storage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Currently, writing directly to cloud storage is only supported for the ``zarmd`` format.
+Currently, writing directly to cloud storage is only supported for the ``zarrmd`` format.
 If you want to write directly to a cloud storage in the H5MD format, please raise an issue
 on the `zarrtraj GitHub <https://github.com/Becksteinlab/zarrtraj>`_.
 
@@ -61,15 +61,17 @@ All datasets in the file will be written using the same chunking strategy:
 regardless of the data type, number of atoms, or number of frames in the trajectory. The only
 exceptions to this are when a single frame of the trajectory is larger than 12MB, in which case
 the chunk size will be 1 frame, or when the dataset is smaller than 12MB, in which case the
-dataset will be written in a single chunk::
+dataset will be written in a single chunk.
+
+.. code-block:: python
 
     import zarrtraj
     import MDAnalysis as mda
+    from MDAnalysisTests.datafiles import PSF, DCD
 
-    u = mda.Universe("topology.tpr", "trajectory.xtc")
+    u = mda.Universe(PSF, DCD)
     with mda.Writer("s3://sample-bucket/trajectory.zarrmd", 
-                    n_atoms=u.atoms.n_atoms, 
-                    n_frames=u.trajectory.n_frames) as w:
+                    n_atoms=u.atoms.n_atoms) as w:
         for ts in u.trajectory:
             w.write(u.atoms)
 
@@ -179,7 +181,16 @@ class ZARRH5MDReader(base.ReaderBase):
         cache_size=(100 * 1024**2),
         **kwargs,
     ):
-        """
+        """Reads ``.h5md`` and ``.zarrmd`` trajectory files using Zarr.
+
+        .. note::
+
+            Though the H5MD standard states that time datasets are optional,
+            MDAnalysis requires that all time-dependent data have a time
+            dataset in order to guarantee that all constructed
+            :class:`~MDAnalysis.coordinates.timestep.Timestep` objects have
+            a time associated with them.
+
         Parameters
         ----------
         filename : str
