@@ -4,13 +4,15 @@ Getting Started
 Installation
 ############
 
-To build zarrtraj from source, we highly recommend using virtual environments.
-If possible, we strongly recommend that you use
-`Anaconda <https://docs.conda.io/en/latest/>`_ as your package manager.
-Below we provide instructions both for installing into a `conda` environment.
+With pip
+--------
 
-With conda
-----------
+Zarrtraj is available `via pip <https://pypi.org/project/zarrtraj/>`_. To install, simply use::
+
+    pip install zarrtraj
+
+From source with conda
+----------------------
 
 Ensure that you have `conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html>`_ installed.
 
@@ -43,7 +45,6 @@ Or the documentation building dependencies::
 
     conda env update --name zarrtraj --file docs/requirements.yaml
 
-Or the benchmarking dependencies (this may have to be in a separate conda env
-depending on package version conflicts)::
+Or the benchmarking dependencies (this may have to be in a separate conda environment)::
 
     conda env update --name zarrtraj --file devtools/conda-envs/asv_env.yaml
