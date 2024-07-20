@@ -21,70 +21,14 @@ zarrtraj
 [url_license]: https://www.gnu.org/licenses/gpl-2.0
 [url_mda]: https://www.mdanalysis.org
 
-This is a kit that provides the ability to read and write trajectory data in the Zarr file format. For more information on the format and usage,
-see the [zarrtraj documentation](https://zarrtraj.readthedocs.io/en/latest/index.html)
+This is an MDAKit that provides the ability to read and write H5MD-formatted trajectory data into MDAnalysis using Zarr. 
+Zarrtraj can read local H5MD files, H5MD files in S3 buckets, and files served via http or https.
+It can read both [H5MD-formatted files stored in hdf5](https://www.nongnu.org/h5md/h5md.html) and [H5MD-formatted files stored 
+in Zarr](https://zarrtraj.readthedocs.io/en/latest/zarrmd-file-spec/v0.1.0.html) (.zarrmd files).
+
+For more information on installation and usage, see the [zarrtraj documentation](https://zarrtraj.readthedocs.io/en/latest/index.html)
 
 zarrtraj is bound by a [Code of Conduct](https://github.com/Becksteinlab/zarrtraj/blob/main/CODE_OF_CONDUCT.md).
-
-### Installation
-
-To build zarrtraj from source,
-we highly recommend using virtual environments.
-If possible, we strongly recommend that you use
-[Anaconda](https://docs.conda.io/en/latest/) as your package manager.
-Below we provide instructions both for `conda` and
-for `pip`.
-
-#### With conda
-
-Ensure that you have [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) installed.
-
-Create a virtual environment and activate it:
-
-```
-conda create --name zarrtraj
-conda activate zarrtraj
-```
-
-Install the development and documentation dependencies:
-
-```
-conda env update --name zarrtraj --file devtools/conda-envs/test_env.yaml
-conda env update --name zarrtraj --file docs/requirements.yaml
-```
-
-Build this package from source:
-
-```
-pip install -e .
-```
-
-If you want to update your dependencies (which can be risky!), run:
-
-```
-conda update --all
-```
-
-And when you are finished, you can exit the virtual environment with:
-
-```
-conda deactivate
-```
-
-#### With pip
-
-To build the package from source, run:
-
-```
-pip install .
-```
-
-If you want to create a development environment, install
-the dependencies required for tests and docs with:
-
-```
-pip install ".[test,doc]"
-```
 
 ### Copyright
 

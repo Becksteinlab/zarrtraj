@@ -1,28 +1,30 @@
 """
 
-Example: Loading a .zarrmd file from disk
+Example: Loading a .h5md file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To load a simulation from a ``.h5md`` trajectory file, pass a
+topology file and a path to the ``.zarrmd`` file to a
+:class:`~MDAnalysis.core.universe.Universe`::
+
+    import zarrtraj
+    import MDAnalysis as mda
+    u = mda.Universe("topology.tpr", "trajectory.h5md")
+
+The reader can also handle reading from a ``.zarrmd`` file.
 
 ``zarrmd`` files are H5MD-formatted files stored in the Zarr format.
 To learn more, see the `H5MD documentation <https://nongnu.org/h5md/>`_,
 the `Zarr documentation <https://zarr.readthedocs.io/en/stable/>`_,
 and the :ref:`zarrmd format page <zarrmd>`.
 
-To load a simulation from a ``.zarrmd`` trajectory file, pass a
-topology file and a path to the ``.zarrmd`` file to a
-:class:`~MDAnalysis.core.universe.Universe`::
-
-    import zarrtraj
-    import MDAnalysis as mda
-    u = mda.Universe("topology.tpr", "trajectory.zarrmd")
-
-The reader can also handle reading from a .h5md file.
-
 Example: Reading from cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Zarrtraj currently supports reading from .h5md and .zarrmd files stored in
-AWS, Google Cloud, and Azure Block Storage.
+Zarrtraj currently supports reading from ``.h5md`` and ``.zarrmd`` files stored in
+AWS S3 buckets. If you are interested in streaming from and writing to other
+cloud service storage options, please raise an issue on the
+`zarrtraj GitHub <https://github.com/Becksteinlab/zarrtraj>`_.
 
 To read from AWS S3, pass the S3 url path to the file as the trajectory
 argument::
@@ -71,10 +73,6 @@ dataset will be written in a single chunk::
         for ts in u.trajectory:
             w.write(u.atoms)
 
-Note that the `n_frames` argument is required. This is because the writer needs to know
-the number of frames in the output trajectory in order to determine the number of frames per chunk
-for each dataset.
-
 Classes
 ^^^^^^^
 
@@ -92,13 +90,13 @@ from MDAnalysis.coordinates import base, core
 from MDAnalysis.exceptions import NoDataError
 from MDAnalysis.due import due, Doi
 from MDAnalysis.lib.util import store_init_arguments
-import dask.array as da
 from enum import Enum
 from .utils import *
-from .cache import FrameCache, AsyncFrameCache
+from .cache import FrameCache
 import collections
 import numbers
 import logging
+import warnings
 
 
 try:
@@ -435,9 +433,8 @@ class ZARRH5MDReader(base.ReaderBase):
         """Prepares the correct method for managing the file
         given the protocol"""
         self._protocol = get_protocol(self.filename)
-        if self._protocol == "s3":
+        if self._protocol in ZARRTRAJ_NETWORK_PROTOCOLS:
             self._cache_type = ZarrLRUCache
-            # NOTE: Import correct packages
         elif self._protocol == "file":
             self._cache_type = ZarrNoCache
         else:
@@ -464,12 +461,8 @@ class ZARRH5MDReader(base.ReaderBase):
             raise NoDataError("H5MD file must contain an 'h5md' group")
 
         if self._group is None:
-            # NOTE: we do this because running moto on gh actions
-            # duplicates all keys in the zarr file when reading
             traj_keys = list(self._file["particles"].group_keys())
-            if len(traj_keys) == 1 or all(
-                traj_key == traj_keys[0] for traj_key in traj_keys
-            ):
+            if len(traj_keys) == 1:
                 self._group = traj_keys[0]
             else:
                 raise NoDataError(
@@ -564,7 +557,7 @@ class ZARRH5MDReader(base.ReaderBase):
         if self.convert_units:
             self._convert_units()
 
-        # frame seq update case 1: read called from __getitem__-like context
+        # frame seq update case 2: read called from __getitem__-like context
         if len(self._frame_seq) == 0:
             self._frame_seq = None
             self._cache.update_frame_seq(self._frame_seq)
@@ -776,9 +769,7 @@ class ZARRH5MDReader(base.ReaderBase):
 
         if group is None:
             traj_keys = list(file["particles"].group_keys())
-            if len(traj_keys) == 1 or all(
-                traj_key == traj_keys[0] for traj_key in traj_keys
-            ):
+            if len(traj_keys) == 1:
                 group = traj_keys[0]
             else:
                 raise NoDataError(
@@ -823,7 +814,7 @@ class H5MDElementBuffer:
         # to get buffer indices, do i.e. _val_idx % _val_frames_per_chunk
         self._val_idx = 0
         self._t_idx = 0
-        self._n_frames = n_frames
+        self._n_frames = n_frames if n_frames is not None else np.inf
 
         val_filter = None
         time_filter = None
@@ -903,7 +894,7 @@ class H5MDElementBuffer:
                 *self._val_chunks[1:],
             )
 
-        if self._t_idx % self._t_frames_per_chunk == 0:
+        if self._t_idx != 0 and self._t_idx % self._t_frames_per_chunk == 0:
             self._t[self._t_idx - self._t_frames_per_chunk :] = self._t_buf[:]
             self._s[self._t_idx - self._t_frames_per_chunk :] = self._s_buf[:]
             self._t.resize(self._t.shape[0] + self._t_frames_per_chunk)
@@ -919,21 +910,28 @@ class H5MDElementBuffer:
         """Write everything remaining in the buffers to the zarr datasets
         and shink the zarr datasets to the correct size.
         """
-        self._val[
-            self._val_idx
-            - (self._val_idx % (self._val_frames_per_chunk + 1)) : self._val_idx
-        ] = self._val_buf[: (self._val_idx % (self._val_frames_per_chunk + 1))]
+        num_v_frames = self._val_idx % self._val_frames_per_chunk
+        if num_v_frames == 0:
+            num_v_frames = self._val_frames_per_chunk
+
+        self._val[self._val_idx - num_v_frames : self._val_idx] = self._val_buf[
+            :num_v_frames
+        ]
         self._val.resize(self._val_idx, *self._val_chunks[1:])
 
-        self._t[
-            self._t_idx
-            - (self._t_idx % (self._t_frames_per_chunk + 1)) : self._t_idx
-        ] = self._t_buf[: (self._t_idx % (self._t_frames_per_chunk + 1))]
+        num_t_frames = self._t_idx % self._t_frames_per_chunk
+        if num_t_frames == 0:
+            num_t_frames = self._t_frames_per_chunk
+
+        self._t[self._t_idx - num_t_frames : self._t_idx] = self._t_buf[
+            :num_t_frames
+        ]
+
         self._t.resize(self._t_idx)
-        self._s[
-            self._t_idx
-            - (self._t_idx % (self._t_frames_per_chunk + 1)) : self._t_idx
-        ] = self._s_buf[: (self._t_idx % (self._t_frames_per_chunk + 1))]
+
+        self._s[self._t_idx - num_t_frames : self._t_idx] = self._s_buf[
+            :num_t_frames
+        ]
         self._s.resize(self._t_idx)
 
 
@@ -947,8 +945,10 @@ class ZARRMDWriter(base.WriterBase):
         filename or URL to write to
     n_atoms : int
         number of atoms in the system
-    n_frames : int
-        number of frames to be written in the output trajectory
+    n_frames : int (optional)
+        number of frames to be written in the output trajectory. If not
+        provided, the trajectory will allocate more memory than necessary
+        which may slow down trajectory write speed.
     compressor : numcodecs.Codec (optional)
         compressor to use for the Zarr datasets. Will be applied to all datasets
     precision : int (optional)
@@ -993,7 +993,7 @@ class ZARRMDWriter(base.WriterBase):
     ValueError
         when ``n_atoms`` is 0
     ValueError
-        when ``n_frames`` is not provided or negative
+        when ``n_frames`` is provided and not positive
     ValueError
         when ``precision`` is less than 0
     ValueError
@@ -1115,9 +1115,9 @@ class ZARRMDWriter(base.WriterBase):
             raise ValueError("H5MDWriter: no atoms in output trajectory")
 
         self.n_atoms = n_atoms
-        if n_frames is None or n_frames < 0:
+        if n_frames is not None and n_frames <= 0:
             raise ValueError(
-                "H5MDWriter: Please provide a non-negative value for 'n_frames' kwarg"
+                "H5MDWriter: Please provide a positive value for 'n_frames' kwarg"
             )
         self.n_frames = n_frames
         self.storage_options = storage_options
@@ -1249,10 +1249,12 @@ class ZARRMDWriter(base.WriterBase):
         self._file["h5md/creator"].attrs["name"] = self.creator
         self._file["h5md/creator"].attrs["version"] = self.creator_version
 
-    def _initialize_zarrmd_file(self, ts):
-        # for keeping track of where to write in the dataset
+        self._curr_time = None
+        self._curr_step = None
+        # for keeping track of num frames written
         self._counter = 0
 
+    def _initialize_zarrmd_file(self, ts):
         # initialize trajectory group
         self._file.require_group("particles").require_group("trajectory")
         self._traj = self._file["particles/trajectory"]
@@ -1404,19 +1406,26 @@ class ZARRMDWriter(base.WriterBase):
         violates the rules of the step dataset in the H5MD standard.
 
         """
-
-        i = self._counter
-
         self._allocate_buffers(ts)
 
-        curr_time = (
+        prev_time = self._curr_time
+        self._curr_time = (
             ts.time
             if self.units["time"] is None
             else self.convert_time_to_native(ts.time)
         )
-        curr_step = ts.data["step"] if "step" in ts.data else ts.frame
-
-        # NOTE: check monotinic increasing
+        if prev_time is not None and self._curr_time < prev_time:
+            raise ValueError(
+                "The H5MD standard dictates that the time values "
+                + "must increase monotonically"
+            )
+        prev_step = self._curr_step
+        self._curr_step = ts.data["step"] if "step" in ts.data else ts.frame
+        if prev_step is not None and self._curr_step < prev_step:
+            raise ValueError(
+                "The H5MD standard dictates that the step values "
+                + "must increase monotonically"
+            )
 
         if ts.dimensions is not None and "box/edges" in self._elements:
 
@@ -1425,7 +1434,9 @@ class ZARRMDWriter(base.WriterBase):
                 if self.units["length"] is None
                 else self.convert_pos_to_native(ts.triclinic_dimensions)
             )
-            self._elements["box/edges"].write(box, curr_step, curr_time)
+            self._elements["box/edges"].write(
+                box, self._curr_step, self._curr_time
+            )
 
             if not ts.has_positions and "position" in self._elements:
                 raise NoDataError(
@@ -1439,7 +1450,9 @@ class ZARRMDWriter(base.WriterBase):
                 if self.units["length"] is None
                 else self.convert_pos_to_native(ts.positions)
             )
-            self._elements["position"].write(pos, curr_step, curr_time)
+            self._elements["position"].write(
+                pos, self._curr_step, self._curr_time
+            )
 
             if ts.dimensions is None and "box/edges" in self._elements:
                 raise NoDataError(
@@ -1453,7 +1466,9 @@ class ZARRMDWriter(base.WriterBase):
                 if self.units["velocity"] is None
                 else self.convert_velocities_to_native(ts.velocities)
             )
-            self._elements["velocity"].write(vel, curr_step, curr_time)
+            self._elements["velocity"].write(
+                vel, self._curr_step, self._curr_time
+            )
 
         if ts.has_forces and "force" in self._elements:
             force = (
@@ -1461,7 +1476,9 @@ class ZARRMDWriter(base.WriterBase):
                 if self.units["force"] is None
                 else self.convert_forces_to_native(ts.forces)
             )
-            self._elements["force"].write(force, curr_step, curr_time)
+            self._elements["force"].write(
+                force, self._curr_step, self._curr_time
+            )
 
         for obsv, value in ts.data.items():
             if (
@@ -1469,7 +1486,9 @@ class ZARRMDWriter(base.WriterBase):
                 and obsv not in self.data_blacklist
                 and obsv in self._elements
             ):
-                self._elements[obsv].write(value, curr_step, curr_time)
+                self._elements[obsv].write(
+                    value, self._curr_step, self._curr_time
+                )
 
         self._counter += 1
 
@@ -1480,6 +1499,22 @@ class ZARRMDWriter(base.WriterBase):
                 elembuffer.flush()
                 # To ensure idempotency:
                 self._elements = dict()
+        if hasattr(self, "_counter"):
+            if self.n_frames is not None:
+                # issue a warning if counter is less or more than n_frames
+                if self._counter < self.n_frames:
+                    warnings.warn(
+                        f"H5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
+                        f"only {self._counter} frame(s) were written to the trajectory.",
+                        RuntimeWarning,
+                    )
+                if self._counter >= self.n_frames:
+                    warnings.warn(
+                        f"H5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
+                        f"{self._counter} frame(s) were written to the trajectory.",
+                        RuntimeWarning,
+                    )
+            del self._counter
         if hasattr(self, "_file") and self._file is not None:
             self._file.store.close()
             self._file = None

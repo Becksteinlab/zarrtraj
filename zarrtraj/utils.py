@@ -7,6 +7,8 @@ from typing import Union, Dict
 import numpy as np
 from kerchunk.hdf import SingleHdf5ToZarr
 
+ZARRTRAJ_NETWORK_PROTOCOLS = ["s3", "http", "https"]
+
 
 class H5MDElement:
     """Convenience class for representing elements in an H5MD
@@ -150,11 +152,12 @@ def get_h5_zarr_mapping(
         h5chunks = SingleHdf5ToZarr(inf, url, inline_threshold=100)
         fo = h5chunks.translate(preserve_linked_dsets=True)
 
-    if protocol == "s3":
+    # Currently supported
+    if protocol in ZARRTRAJ_NETWORK_PROTOCOLS:
         fs = fsspec.filesystem(
             "reference",
             fo=fo,
-            remote_protocol="s3",
+            remote_protocol=protocol,
             remote_options=so,
             skip_instance_cache=True,
         )
@@ -172,7 +175,8 @@ def get_h5_zarr_mapping(
 
 def get_mapping_for(filename, protocol, ext, so):
     if ext == ".zarr" or ext == ".zarrmd":
-        mapping = zarr.storage.FSStore(filename, mode="r", **so)
+        fs = fsspec.filesystem(protocol, **so)
+        mapping = fs.get_mapper(filename)
     elif ext == ".h5md" or ext == ".h5":
         mapping = get_h5_zarr_mapping(filename, protocol, so)
     else:
