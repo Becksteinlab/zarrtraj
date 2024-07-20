@@ -5,10 +5,13 @@ Zarrmd specification
 
 The `zarrmd` trajectory file format uses the H5MD file format as a directory structure and metadata 
 specification for storing molecular dynamics simulation data in the `Zarr` file format.
-`zarrmd`files are exactly the same as `H5MD` files, but with the `.zarrmd` extension except for one 
+
+`zarrmd` files are exactly the same as `H5MD` files, but with the `.zarrmd` extension, except for one 
 broken H5MD layout requirement: H5MD requires that the 'step' and 'time' datasets of the 'particles'
 trajectory group's simulation box must be hard linked to the 'step' and 'time' datasets of the corresponding
-trajectory groups' 'positions' dataset. This is not possible in Zarr, so this requirement is relaxed in `zarrmd` 
+trajectory groups' 'positions' dataset. 
+
+This is not possible in Zarr, so this requirement is relaxed in `zarrmd` 
 such that the 'step' and 'time' datasets of the 'particles' trajectory group in the simulation box and positions
 datasets are required to contain the exact same shape and data, but are not required to be hard linked.
 

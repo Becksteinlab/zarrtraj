@@ -1,5 +1,5 @@
-Full walkthrough
-================
+Walkthrough
+===========
 
 Reading H5MD trajectories from cloud storage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -8,7 +8,7 @@ Uploading your H5MD file
 ########################
 
 First, upload your H5MD trajectories to an AWS S3 bucket. This requires that an S3 Bucket is setup and configured for 
-write access using the credentials stored in "sample_profile" If you've never configured an S3 Bucket before, see
+write access using the credentials stored in "sample_profile". If you've never configured an S3 Bucket before, see
 `this guide <https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-bucket.html>`_. You can setup a profile to easily manage AWS
 credentials using `this VSCode extension <https://marketplace.visualstudio.com/items?itemName=AmazonWebServices.aws-toolkit-vscode>`_.
 Here is a sample profile (stored in ~/.aws/credentials) where 
@@ -20,7 +20,7 @@ Here is a sample profile (stored in ~/.aws/credentials) where
 
 MDAnalysis can write a trajectory from
 `any of its supported formats into H5MD <https://docs.mdanalysis.org/stable/documentation_pages/coordinates/H5MD.html>`_. We 
-recommend using the `chunks` kwarg with the MDAnalysis H5MDWriter with a value that yields ~8-16MB chunks of data for best S3 performance.
+recommend using the ```chunks``` kwarg with the MDAnalysis H5MDWriter with a value that yields ~8-16MB chunks of data for best S3 performance.
 Once written locally, you can upload the trajectory to S3 programatically::
 
     import os
@@ -29,20 +29,17 @@ Once written locally, you can upload the trajectory to S3 programatically::
     import logging
 
     os.environ["AWS_PROFILE"] = "sample_profile"
-    # This is the AWS region the bucket is stored in
+    # This is the AWS region where the bucket is located
     os.environ["AWS_REGION"] = "us-west-1"
 
     def upload_h5md_file(bucket_name, file_name):
         s3_client = boto3.client("s3")
         obj_name = os.path.basename(file_name)
-        try:
-            response = s3_client.upload_file(
-                file_name, bucket_name, obj_name
-            )
-        except ClientError as e:
-            logging.error(e)
-            return False
-        return True
+
+        response = s3_client.upload_file(
+            file_name, bucket_name, obj_name
+        )
+
 
     if __name__ == "__main__":
         # Using test H5MD file from the zarrtraj repo
@@ -69,23 +66,23 @@ After the file is uploaded, you can use the same credentials to stream the file 
     for ts in u.trajectory:
         pass
 
-You can follow this same process for reading `.zarrmd` files with the added advantage
-that Zarrtarj can write `.zarrmd` files directly into an S3 bucket.
+You can follow this same process for reading ``.zarrmd`` files with the added advantage
+that Zarrtarj can write ``.zarrmd`` files from MDAnalysis directly into an S3 bucket.
 
-Writing trajectories from MDAnalysis into a zarrmd file in an S3 Bucket
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Writing trajectories from MDAnalysis into a .zarrmd file in an S3 Bucket
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Using the same credentials with read/write access, you can write a trajectory
 into your bucket.
 
 You can change the stored precision of floating point values in the file with the optional
-`precision` kwarg and pass in any `numcodecs.Codec` compressor with the optional
-`compressor` kwarg. See [numcodecs](https://numcodecs.readthedocs.io/en/stable/)
+``precision`` kwarg and pass in any ```numcodecs.Codec``` compressor with the optional
+``compressor`` kwarg. See `numcodecs <https://numcodecs.readthedocs.io/en/stable/>`_
 for more on the available compressors.
 
 Chunking is automatically determined for all datasets to be optimized for
 cloud storage and is not configurable by the user. 
-Initial benchmarks show this chunking strategy is effective for disk storage as well.::
+Initial benchmarks show this chunking strategy is effective for disk storage as well::
 
     import zarrtraj
     import MDAnalysis as mda
