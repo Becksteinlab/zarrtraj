@@ -13,6 +13,6 @@ Welcome to zarrtraj's documentation!
    installation
    walkthrough
    api
-   zarrmd-file-spec/v0.1.0
+   zarrmd-file-spec/v0.2.0
    benchmarks
 

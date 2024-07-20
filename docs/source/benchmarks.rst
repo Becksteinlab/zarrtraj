@@ -13,6 +13,7 @@ on Spudda, which has:
 Local file speed tests were performed in the 1.31 TB SSD scratch space using RAID 0.
 
 The following metrics were measured:
+
 - ``ZARRH5MDDiskStrideTime``: Time to iterate through all timesteps in SSD-stored trajectory files
     using compressed & uncompressed zarrmd and h5md files.
 - ``ZARRH5MDS3StrideTime``: Time to iterate through all timesteps in S3-stored trajectory files
@@ -33,12 +34,13 @@ aligned using the ``MDAnalysis`` :class:`MDAnalysis.analysis.align.AlignTraj` cl
 rewritten in the ``zarrmd`` and ``H5MD`` formats using the ``zarrtraj`` package.
 
 Highlights:
+
 - The dask parallelized RMSF calculation performed ~4x faster than the serial calculation via MDAnalysis
   on both local and S3-stored trajectory files. While this method is not yet implemented in ``zarrtraj``,
   it may be in a future version
 - The ``ZARRH5MDReader`` class performed ~2-4x faster than the ``H5MDReader`` class on iterating through
   local trajectory files, though this may be because the files were written using a chunking strategy
   favorable to the ``ZARRH5MDReader`` class.
-- For each trajectory file, iterating through its timesteps from S3 storage took about twice as logging
+- For each trajectory file, iterating through its timesteps using the ``ZARRH5MDReader`` from S3 storage took about twice as long
   as iterating through the same file from local SSD storage.
   
