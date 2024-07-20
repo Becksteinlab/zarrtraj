@@ -76,8 +76,7 @@ Writing trajectories from MDAnalysis into a zarrmd file in an S3 Bucket
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Using the same credentials with read/write access, you can write a trajectory
-into your bucket. Note that the `n_frames` kwarg is required unlike 
-with other MDAnalysis writers, though this may not be the case in future releases.
+into your bucket.
 
 You can change the stored precision of floating point values in the file with the optional
 `precision` kwarg and pass in any `numcodecs.Codec` compressor with the optional
@@ -100,8 +99,6 @@ Initial benchmarks show this chunking strategy is effective for disk storage as 
     u = mda.Universe(PSF, DCD)
     with mda.Writer("s3://sample-bucket-name/test.zarrmd", 
                     n_atoms=u.trajectory.n_atoms, 
-                    n_frames=u.trajectory.n_frames,
-                    # Not required
                     precision=3,
                     compressor=numcodecs.Blosc(cname="zstd", clevel=9)) as W:
                     for ts in u.trajectory:

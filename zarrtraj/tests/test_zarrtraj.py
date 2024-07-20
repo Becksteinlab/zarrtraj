@@ -122,23 +122,6 @@ def ref(request):
 class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
 
-    # Override get_writer tests to provide n_frames kwarg
-    @pytest.mark.skip(reason="Not implemented")
-    def test_get_writer_1(self, ref, reader, tmpdir):
-        with tmpdir.as_cwd():
-            outfile = "test-writer." + ref.ext
-            with reader.Writer(outfile, n_frames=1) as W:
-                assert_equal(isinstance(W, ref.writer), True)
-                assert_equal(W.n_atoms, reader.n_atoms)
-
-    @pytest.mark.skip(reason="Not implemented")
-    def test_get_writer_2(self, ref, reader, tmpdir):
-        with tmpdir.as_cwd():
-            outfile = "test-writer." + ref.ext
-            with reader.Writer(outfile, n_atoms=100, n_frames=1) as W:
-                assert_equal(isinstance(W, ref.writer), True)
-                assert_equal(W.n_atoms, 100)
-
 
 # H5MD Format Reader Tests
 # Only test these with disk to avoid excessive test length
@@ -368,7 +351,7 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
         outfile = prefix + "write-none." + ref.ext
         with tmpdir.as_cwd():
             with pytest.raises(TypeError):
-                with ref.writer(outfile, 42, n_frames=1) as w:
+                with ref.writer(outfile, 42) as w:
                     w.write(None)
 
     def test_no_container(self, ref, tmpdir, prefix):
@@ -428,3 +411,55 @@ class TestH5MDFmtWriterNumcodecs:
                 assert written[h5mdelem_path][
                     "step"
                 ].compressor == numcodecs.Blosc(cname="zstd", clevel=7)
+
+
+class TestH5MDFmtWriterNFrames:
+    @pytest.fixture()
+    def universe(self):
+        return mda.Universe(TPR_xvf, H5MD_xvf)
+
+    def test_write_below_n_frames(self, universe, tmpdir):
+        """Writing below n_frames should issue a warning but still write
+        the correct number of frames"""
+
+        with tmpdir.as_cwd():
+            with pytest.warns(
+                RuntimeWarning,
+            ):
+                with mda.Writer(
+                    "foo.zarrmd",
+                    universe.atoms.n_atoms,
+                    n_frames=2,
+                ) as w:
+                    w.write(universe)
+
+            written = mda.Universe(TPR_xvf, "foo.zarrmd")
+            for i in range(len(written.trajectory)):
+                assert_timestep_almost_equal(
+                    written.trajectory[i], universe.trajectory[i]
+                )
+
+            assert len(written.trajectory) == 1
+
+    def test_write_above_n_frames(self, universe, tmpdir):
+        """Writing above n_frames should issue a warning but still write
+        the correct number of frames"""
+        with tmpdir.as_cwd():
+            with pytest.warns(
+                RuntimeWarning,
+            ):
+                with mda.Writer(
+                    "foo.zarrmd",
+                    universe.atoms.n_atoms,
+                    n_frames=2,
+                ) as w:
+                    for ts in universe.trajectory:
+                        w.write(universe)
+
+            written = mda.Universe(TPR_xvf, "foo.zarrmd")
+            for i in range(len(written.trajectory)):
+                assert_timestep_almost_equal(
+                    written.trajectory[i], universe.trajectory[i]
+                )
+
+            assert len(written.trajectory) == 3
