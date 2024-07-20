@@ -85,6 +85,12 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: artifact-whl
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: artifact-sdist
           path: dist
 
       - name: Print directory contents
