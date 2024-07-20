@@ -48,7 +48,6 @@ jobs:
       - name: upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: whl-artifact
           path: ./wheelhouse/*.whl
 
   build_sdist:
@@ -64,7 +63,6 @@ jobs:
       - name: upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sdist-artifact
           path: ./dist/*.tar.gz
 
   upload_testpypi_zarrtraj:
