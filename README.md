@@ -24,7 +24,7 @@ zarrtraj
 This is an MDAKit that provides the ability to read and write H5MD-formatted trajectory data into MDAnalysis using Zarr. 
 Zarrtraj can read local H5MD files, H5MD files in S3 buckets, and files served via http or https.
 It can read both [H5MD-formatted files stored in hdf5](https://www.nongnu.org/h5md/h5md.html) and [H5MD-formatted files stored 
-in Zarr](https://zarrtraj.readthedocs.io/en/latest/zarrmd-file-spec/v0.1.0.html) (.zarrmd files).
+in Zarr](https://zarrtraj.readthedocs.io/en/latest/zarrmd-file-spec/v0.2.0.html) (.zarrmd files).
 
 Zarrtraj is installable via pip and conda availability is coming soon.
 
