@@ -43,7 +43,7 @@ jobs:
 
       - name: Build wheel
         run: |
-          pip wheel . -w wheelhouse/
+          pip wheel --no-deps . -w wheelhouse/
       
       - name: upload artifacts
         uses: actions/upload-artifact@v4
