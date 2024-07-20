@@ -15,6 +15,23 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.2.0]
+
+
+### Authors
+- ljwoods2
+
+### Added
+- Rewrite of repository, zarrtraj supports reading H5MD-formatted files
+
+### Fixed
+
+
+### Changed
+
+
+### Deprecated
+- Proprietary zarrtraj format no longer supported
 
 ## [0.1.0]
 
