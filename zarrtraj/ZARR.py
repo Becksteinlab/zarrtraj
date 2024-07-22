@@ -170,7 +170,18 @@ class ZARRH5MDReader(base.ReaderBase):
             "kcal mol-1 A-1": "kcal/(mol*Angstrom)",
         },
     }
-
+    @due.dcite(Doi("10.25080/majora-1b6fd038-005"),
+               description="MDAnalysis trajectory reader/writer of the H5MD"
+               "format", path=__name__)
+    @due.dcite(Doi("10.1016/j.cpc.2014.01.018"),
+               description="Specifications of the H5MD standard",
+               path=__name__, version='1.1')
+    @due.dcite(Doi("10.25080/Majora-629e541a-00e"),
+               description="MDAnalysis 2016",
+               path=__name__)
+    @due.dcite(Doi("10.1002/jcc.21787"),
+               description="MDAnalysis 2011",
+               path=__name__)
     @store_init_arguments
     def __init__(
         self,
@@ -1077,18 +1088,18 @@ class ZARRMDWriter(base.WriterBase):
             "kcal/(mol*A)": "kcal mol-1 Angstrom-1",
         },
     }
-
-    @due.dcite(
-        Doi("10.25080/majora-1b6fd038-005"),
-        description="MDAnalysis trajectory reader/writer of the H5MD" "format",
-        path=__name__,
-    )
-    @due.dcite(
-        Doi("10.1016/j.cpc.2014.01.018"),
-        description="Specifications of the H5MD standard",
-        path=__name__,
-        version="1.1",
-    )
+    @due.dcite(Doi("10.25080/majora-1b6fd038-005"),
+               description="MDAnalysis trajectory reader/writer of the H5MD"
+               "format", path=__name__)
+    @due.dcite(Doi("10.1016/j.cpc.2014.01.018"),
+               description="Specifications of the H5MD standard",
+               path=__name__, version='1.1')
+    @due.dcite(Doi("10.25080/Majora-629e541a-00e"),
+               description="MDAnalysis 2016",
+               path=__name__)
+    @due.dcite(Doi("10.1002/jcc.21787"),
+               description="MDAnalysis 2011",
+               path=__name__)
     def __init__(
         self,
         filename,
