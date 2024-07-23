@@ -18,7 +18,7 @@ Ensure that you have `conda <https://docs.conda.io/projects/conda/en/latest/user
 
 Clone the repository::
 
-    git clone https://github.com/Becksteinlab/zarrtraj.git .
+    git clone https://github.com/Becksteinlab/zarrtraj.git
 
 Create a virtual environment and activate it::
 
