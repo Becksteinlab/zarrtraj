@@ -5,7 +5,7 @@ zarrtraj
 | **Latest release** | [![Last release tag][badge_release]][url_latest_release] ![GitHub commits since latest release (by date) for a branch][badge_commits_since]  [![Documentation Status][badge_docs]][url_docs]|
 | :----------------- | :------- |
 | **Status**         | [![GH Actions Status][badge_actions]][url_actions] [![codecov][badge_codecov]][url_codecov] |
-| **Community**      | [![License: GPL v2][badge_license]][url_license]  [![Powered by MDAnalysis][badge_mda]][url_mda]|
+| **Community**      | [![License: GPL v3][badge_license]][url_license]  [![Powered by MDAnalysis][badge_mda]][url_mda]|
 
 [badge_actions]: https://github.com/Becksteinlab/zarrtraj/actions/workflows/gh-ci.yaml/badge.svg
 [badge_codecov]: https://codecov.io/gh/Becksteinlab/zarrtraj/branch/main/graph/badge.svg
@@ -18,7 +18,7 @@ zarrtraj
 [url_codecov]: https://codecov.io/gh/Becksteinlab/zarrtraj/branch/main
 [url_docs]: https://zarrtraj.readthedocs.io/en/latest/?badge=latest
 [url_latest_release]: https://github.com/Becksteinlab/zarrtraj/releases
-[url_license]: https://www.gnu.org/licenses/gpl-2.0
+[url_license]: https://www.gnu.org/licenses/gpl-3.0.html
 [url_mda]: https://www.mdanalysis.org
 
 This is an MDAKit that provides the ability to read and write H5MD-formatted trajectory data into MDAnalysis using Zarr. 
