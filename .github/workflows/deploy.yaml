@@ -52,8 +52,8 @@ jobs:
 
       - name: Print directory contents
         run: |
-          echo "Contents of the dist directory:"
-          ls -l dist
+          echo "Contents of the wheelhouse directory:"
+          ls -l wheelhouse
           
       - name: upload artifacts
         uses: actions/upload-artifact@v4
