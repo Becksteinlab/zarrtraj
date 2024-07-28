@@ -21,24 +21,26 @@ zarrtraj
 [url_license]: https://www.gnu.org/licenses/gpl-3.0.html
 [url_mda]: https://www.mdanalysis.org
 
-This is an MDAKit that provides the ability to read and write H5MD-formatted trajectory data into MDAnalysis using Zarr. 
-Zarrtraj can read local H5MD files, H5MD files in S3 buckets, and files served via http or https.
-It can read both [H5MD-formatted files stored in hdf5](https://www.nongnu.org/h5md/h5md.html) and [H5MD-formatted files stored 
+Zarrtraj is an MDAnalysis MDAKit that provides the ability to read and write H5MD-formatted trajectory data in MDAnalysis using Zarr. 
+Zarrtraj can read trajectories locally and from AWS S3, Google Cloud Buckets, and Azure Blob Storage & DataLakes.
+It can read both [H5MD-formatted files stored in hdf5](https://www.nongnu.org/h5md/h5md.html) (.h5md files) and [H5MD-formatted files stored 
 in Zarr](https://zarrtraj.readthedocs.io/en/latest/zarrmd-file-spec/v0.2.0.html) (.zarrmd files).
 
-Zarrtraj is installable via pip and conda availability is coming soon.
-
+Zarrtraj is installable via both pip and conda forge:
 ```bash
 pip install zarrtraj
+```
+```bash
+conda install -c conda-forge zarrtraj
 ```
 
 For more information on installation and usage, see the [zarrtraj documentation](https://zarrtraj.readthedocs.io/en/latest/index.html)
 
-zarrtraj is bound by a [Code of Conduct](https://github.com/Becksteinlab/zarrtraj/blob/main/CODE_OF_CONDUCT.md).
+Zarrtraj is bound by a [Code of Conduct](https://github.com/Becksteinlab/zarrtraj/blob/main/CODE_OF_CONDUCT.md).
 
 ### Copyright
 
-The zarrtraj source code is hosted at https://github.com/Becksteinlab/zarrtraj
+The Zarrtraj source code is hosted at https://github.com/Becksteinlab/zarrtraj
 and is available under the GNU General Public License, version 2 (see the file [LICENSE](https://github.com/Becksteinlab/zarrtraj/blob/main/LICENSE)).
 
 Copyright (c) 2024, Lawson Woods
@@ -48,4 +50,4 @@ Copyright (c) 2024, Lawson Woods
  
 Project based on the 
 [MDAnalysis Cookiecutter](https://github.com/MDAnalysis/cookiecutter-mda) version 0.1.
-Please cite [MDAnalysis](https://github.com/MDAnalysis/mdanalysis#citation) when using zarrtraj in published work.
+Please cite [MDAnalysis](https://github.com/MDAnalysis/mdanalysis#citation) when using Zarrtraj in published work.

@@ -256,7 +256,6 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
                 with ref.writer(
                     outfile,
                     universe.atoms.n_atoms,
-                    n_frames=universe.trajectory.n_frames,
                 ) as W:
                     for ts in universe.trajectory:
                         universe.dimensions[:3] += 1
@@ -278,7 +277,6 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
             with ref.writer(
                 outfile,
                 universe.atoms.n_atoms,
-                n_frames=universe.trajectory.n_frames,
             ) as w:
                 for ts in universe.trajectory:
                     w.write(universe.atoms)
@@ -292,7 +290,6 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
             with ref.writer(
                 outfile,
                 universe.atoms.n_atoms,
-                n_frames=universe.trajectory.n_frames,
             ) as w:
                 for ts in universe.trajectory:
                     w.write(universe)
@@ -317,7 +314,6 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
             with ref.writer(
                 outfile,
                 sel.n_atoms,
-                n_frames=universe.trajectory.n_frames,
             ) as W:
                 for ts in universe.trajectory:
                     W.write(sel.atoms)
@@ -342,7 +338,6 @@ class TestH5MDFmtWriterBaseAPI(BaseWriterTest):
             with ref.writer(
                 outfile,
                 n_atoms=5,
-                n_frames=1,
             ) as W:
                 W.write(universe)
                 assert_timestep_almost_equal(copy_ts, universe.trajectory.ts)
@@ -374,7 +369,6 @@ class TestH5MDFmtWriterNumcodecs:
             with mda.Writer(
                 outfile,
                 universe.atoms.n_atoms,
-                n_frames=universe.trajectory.n_frames,
                 compressor=numcodecs.Blosc(cname="zstd", clevel=7),
                 precision=3,
             ) as w:

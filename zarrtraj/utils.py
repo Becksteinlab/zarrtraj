@@ -7,7 +7,8 @@ from typing import Union, Dict
 import numpy as np
 from kerchunk.hdf import SingleHdf5ToZarr
 
-ZARRTRAJ_NETWORK_PROTOCOLS = ["s3", "http", "https"]
+ZARRTRAJ_NETWORK_PROTOCOLS = ["s3", "http", "https", "adl", "abfs", "az", "gcs"]
+ZARRTRAJ_EXPERIMENTAL_PROTOCOLS = ["adl", "abfs", "az", "gcs"]
 
 
 class H5MDElement:
@@ -152,7 +153,6 @@ def get_h5_zarr_mapping(
         h5chunks = SingleHdf5ToZarr(inf, url, inline_threshold=100)
         fo = h5chunks.translate(preserve_linked_dsets=True)
 
-    # Currently supported
     if protocol in ZARRTRAJ_NETWORK_PROTOCOLS:
         fs = fsspec.filesystem(
             "reference",

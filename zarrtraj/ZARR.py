@@ -22,9 +22,11 @@ Example: Reading from cloud services
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Zarrtraj currently supports reading from ``.h5md`` and ``.zarrmd`` files stored in
-AWS S3 buckets. If you are interested in streaming from and writing to other
-cloud service storage options, please raise an issue on the
-`zarrtraj GitHub <https://github.com/Becksteinlab/zarrtraj>`_.
+AWS S3 buckets and, experimentally, Google Cloud buckets, Azure Blob storage,
+and Azure DataLakes.
+
+AWS S3
+------
 
 To read from AWS S3, pass the S3 url path to the file as the trajectory
 argument::
@@ -42,6 +44,34 @@ argument::
 
 AWS provides a VSCode extension to manage AWS authentication profiles
 `here <https://aws.amazon.com/visualstudiocode/>`_.
+
+Google Cloud Storage
+--------------------
+
+First, follow `these instructions <https://cloud.google.com/docs/authentication/provide-credentials-adc>`_ 
+to setup Application Default Credentials. Then, after ensuring your GCS bucket exists and you've logged in 
+using the gcloud CLI with a user that has read access to the bucket, you can read from the GCS bucket as follows::
+
+    import zarrtraj
+    import MDAnalysis as mda
+
+    u = mda.Universe("topology.tpr", "gcs://sample-bucket/trajectory.h5md")
+
+Azure Blob Storage and Data Lakes
+---------------------------------
+
+After configuring your storage account and container, the easiest way to authenticate is to use your storage accounts'
+connection string which can be found in the Azure Portal::
+
+    import zarrtraj
+    import MDAnalysis as mda
+
+    # For production use, make sure to store your connection string in a secure location
+    os.environ["AZURE_STORAGE_CONNECTION_STRING"]
+
+    u = mda.Universe("topology.tpr", "az://sample-container/trajectory.h5md")
+
+For more information on authenticating with Azure, see the `adlfs documentation <https://github.com/fsspec/adlfs>`_.
 
 .. warning::
 
@@ -63,17 +93,29 @@ exceptions to this are when a single frame of the trajectory is larger than 12MB
 the chunk size will be 1 frame, or when the dataset is smaller than 12MB, in which case the
 dataset will be written in a single chunk.
 
+
 .. code-block:: python
 
     import zarrtraj
     import MDAnalysis as mda
     from MDAnalysisTests.datafiles import PSF, DCD
+    import os
+
+    os.environ["AWS_PROFILE"] = "sample_profile"
+    os.environ["AWS_REGION"] = "us-west-1"
 
     u = mda.Universe(PSF, DCD)
     with mda.Writer("s3://sample-bucket/trajectory.zarrmd", 
                     n_atoms=u.atoms.n_atoms) as w:
         for ts in u.trajectory:
             w.write(u.atoms)
+
+For Google Cloud Storage, change the URL protocol to ``gcs`` and the authenticate with the gcloud CLI.
+
+For Azure Blob Storage or Data Lakes, change the URL protocol to ``abfs``/``adl``/``az`` and authenticate with
+your storage account's connection string.
+
+For details on authenticating with different cloud services, see their respective trajectory reading sections above.
 
 Classes
 ^^^^^^^
@@ -170,18 +212,26 @@ class ZARRH5MDReader(base.ReaderBase):
             "kcal mol-1 A-1": "kcal/(mol*Angstrom)",
         },
     }
-    @due.dcite(Doi("10.25080/majora-1b6fd038-005"),
-               description="MDAnalysis trajectory reader/writer of the H5MD"
-               "format", path=__name__)
-    @due.dcite(Doi("10.1016/j.cpc.2014.01.018"),
-               description="Specifications of the H5MD standard",
-               path=__name__, version='1.1')
-    @due.dcite(Doi("10.25080/Majora-629e541a-00e"),
-               description="MDAnalysis 2016",
-               path=__name__)
-    @due.dcite(Doi("10.1002/jcc.21787"),
-               description="MDAnalysis 2011",
-               path=__name__)
+
+    @due.dcite(
+        Doi("10.25080/majora-1b6fd038-005"),
+        description="MDAnalysis trajectory reader/writer of the H5MD" "format",
+        path=__name__,
+    )
+    @due.dcite(
+        Doi("10.1016/j.cpc.2014.01.018"),
+        description="Specifications of the H5MD standard",
+        path=__name__,
+        version="1.1",
+    )
+    @due.dcite(
+        Doi("10.25080/Majora-629e541a-00e"),
+        description="MDAnalysis 2016",
+        path=__name__,
+    )
+    @due.dcite(
+        Doi("10.1002/jcc.21787"), description="MDAnalysis 2011", path=__name__
+    )
     @store_init_arguments
     def __init__(
         self,
@@ -272,6 +322,7 @@ class ZARRH5MDReader(base.ReaderBase):
         so = storage_options if storage_options is not None else {}
 
         self._determine_protocol()
+
         self._mapping = get_mapping_for(
             filename, self._protocol, get_extension(self.filename), so
         )
@@ -461,7 +512,14 @@ class ZARRH5MDReader(base.ReaderBase):
             self._cache_type = ZarrNoCache
         else:
             raise ValueError(
-                f"Unsupported protocol '{self._protocol}' for H5MD file."
+                f"Unsupported protocol '{self._protocol}' for Zarrtraj."
+            )
+
+        if self._protocol in ZARRTRAJ_EXPERIMENTAL_PROTOCOLS:
+            warnings.warn(
+                f"Zarrtraj is using the experimental protocol '{self._protocol}' "
+                "which may lead to unexpected behavior. Please report any issues "
+                "on the Zarrtraj GitHub."
             )
 
     def _open_trajectory(self):
@@ -850,7 +908,7 @@ class H5MDElementBuffer:
         # Use 12MB to get a reasonable number of frames per chunk
         # if a single frame is >12MB, just select 1 FPC
         self._val_frames_per_chunk = min(
-            max(1, (12582912 // bytes_per_frame)), n_frames
+            max(1, (12582912 // bytes_per_frame)), self._n_frames
         )
         # If the dataset is smaller than 12MB, just write it all at once
         self._val_chunks = tuple((self._val_frames_per_chunk, *shape))
@@ -869,7 +927,7 @@ class H5MDElementBuffer:
             self._val.attrs["unit"] = val_unit
 
         # Step and time both use 4 byte dtypes
-        self._t_frames_per_chunk = min((12582912 // 4), n_frames)
+        self._t_frames_per_chunk = min((12582912 // 4), self._n_frames)
         self._t_chunks = (self._t_frames_per_chunk,)
 
         self._t_buf = np.empty(self._t_chunks, dtype=np.float32)
@@ -1088,18 +1146,26 @@ class ZARRMDWriter(base.WriterBase):
             "kcal/(mol*A)": "kcal mol-1 Angstrom-1",
         },
     }
-    @due.dcite(Doi("10.25080/majora-1b6fd038-005"),
-               description="MDAnalysis trajectory reader/writer of the H5MD"
-               "format", path=__name__)
-    @due.dcite(Doi("10.1016/j.cpc.2014.01.018"),
-               description="Specifications of the H5MD standard",
-               path=__name__, version='1.1')
-    @due.dcite(Doi("10.25080/Majora-629e541a-00e"),
-               description="MDAnalysis 2016",
-               path=__name__)
-    @due.dcite(Doi("10.1002/jcc.21787"),
-               description="MDAnalysis 2011",
-               path=__name__)
+
+    @due.dcite(
+        Doi("10.25080/majora-1b6fd038-005"),
+        description="MDAnalysis trajectory reader/writer of the H5MD" "format",
+        path=__name__,
+    )
+    @due.dcite(
+        Doi("10.1016/j.cpc.2014.01.018"),
+        description="Specifications of the H5MD standard",
+        path=__name__,
+        version="1.1",
+    )
+    @due.dcite(
+        Doi("10.25080/Majora-629e541a-00e"),
+        description="MDAnalysis 2016",
+        path=__name__,
+    )
+    @due.dcite(
+        Doi("10.1002/jcc.21787"), description="MDAnalysis 2011", path=__name__
+    )
     def __init__(
         self,
         filename,
@@ -1177,6 +1243,16 @@ class ZARRMDWriter(base.WriterBase):
         self.author_email = author_email
         self.creator = creator
         self.creator_version = creator_version
+
+        protocol = get_protocol(filename)
+        if protocol not in ZARRTRAJ_NETWORK_PROTOCOLS and protocol != "file":
+            raise ValueError(f"Unsupported protocol '{protocol}' for Zarrtraj.")
+        if protocol in ZARRTRAJ_EXPERIMENTAL_PROTOCOLS:
+            warnings.warn(
+                f"Zarrtraj is using the experimental protocol '{protocol}' "
+                "which may lead to unexpected behavior. Please report any issues "
+                "on the Zarrtraj GitHub."
+            )
 
     def _write_next_frame(self, ag):
         """Write information associated with ``ag`` at current frame
