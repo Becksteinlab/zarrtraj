@@ -232,6 +232,7 @@ class ZARRH5MDReader(base.ReaderBase):
     @due.dcite(
         Doi("10.1002/jcc.21787"), description="MDAnalysis 2011", path=__name__
     )
+    @due.dcite(Doi("10.5281/zenodo.3773449"), description="Zarr", path=__name__)
     @store_init_arguments
     def __init__(
         self,
