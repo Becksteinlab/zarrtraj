@@ -1,6 +1,10 @@
 Walkthrough
 ===========
 
+This walkthrough will guide you through the process of reading and writing H5MD-formatted trajectories from cloud storage using 
+AWS S3 as an example. To learn more about reading and writing trajectories from different cloud storage providers, 
+including Google Cloud and Azure, see the API documentation.
+
 Reading H5MD trajectories from cloud storage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

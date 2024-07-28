@@ -4,15 +4,22 @@ Getting Started
 Installation
 ############
 
-With pip
---------
+From PyPI
+---------
 
-Zarrtraj is available `via pip <https://pypi.org/project/zarrtraj/>`_. To install, simply use::
+Zarrtraj is installable `via pip <https://pypi.org/project/zarrtraj/>`_. To install, simply use::
 
     pip install zarrtraj
 
-From source with conda
-----------------------
+From Conda Forge
+----------------
+
+Zarrtraj is also available on `conda-forge <https://anaconda.org/conda-forge/zarrtraj>`_::
+
+    conda install -c conda-forge zarrtraj
+
+From source into a conda environment
+------------------------------------
 
 Ensure that you have `conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html>`_ installed.
 

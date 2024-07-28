@@ -15,6 +15,23 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.2.1] 2024-07-28
+
+
+### Authors
+- ljwoods2
+
+### Added
+- Experimental support for Google Cloud Buckets and Azure Blob Storage & Data Lakes
+
+### Fixed
+- Fixed bug which caused writer to fail when optional `n_frames` kwarg not provided
+
+### Changed
+
+
+### Deprecated
+
 ## [0.2.0]
 
 
