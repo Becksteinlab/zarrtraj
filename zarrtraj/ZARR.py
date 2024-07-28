@@ -215,7 +215,7 @@ class ZARRH5MDReader(base.ReaderBase):
 
     @due.dcite(
         Doi("10.25080/majora-1b6fd038-005"),
-        description="MDAnalysis trajectory reader/writer of the H5MD" "format",
+        description="MDAnalysis trajectory reader/writer of the H5MD format",
         path=__name__,
     )
     @due.dcite(
