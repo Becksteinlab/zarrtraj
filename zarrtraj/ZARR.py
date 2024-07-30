@@ -49,8 +49,9 @@ Google Cloud Storage
 --------------------
 
 First, follow `these instructions <https://cloud.google.com/docs/authentication/provide-credentials-adc>`_ 
-to setup Application Default Credentials. Then, after ensuring your GCS bucket exists and you've logged in 
-using the gcloud CLI with a user that has read access to the bucket, you can read from the GCS bucket as follows::
+to setup Application Default Credentials on the machine you're streaming the trajectory to.
+Then, after ensuring your GCS bucket exists and you've logged in using the gcloud CLI with a user that has read access to the bucket, 
+you can read from the GCS bucket as follows::
 
     import zarrtraj
     import MDAnalysis as mda
@@ -67,7 +68,7 @@ connection string which can be found in the Azure Portal::
     import MDAnalysis as mda
 
     # For production use, make sure to store your connection string in a secure location
-    os.environ["AZURE_STORAGE_CONNECTION_STRING"]
+    os.environ["AZURE_STORAGE_CONNECTION_STRING"] = <str>
 
     u = mda.Universe("topology.tpr", "az://sample-container/trajectory.h5md")
 
