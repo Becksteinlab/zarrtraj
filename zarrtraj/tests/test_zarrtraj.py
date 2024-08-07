@@ -122,6 +122,72 @@ def ref(request):
 class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
 
+    @pytest.mark.parametrize("asel", ("index 1", "index 2", "index 1 to 3"))
+    def test_timeseries_asel_shape(self, reader, asel, ref):
+        if ref.trajectory.startswith("s3") and ref.trajectory.endswith(
+            ".zarrmd"
+        ):
+            pytest.skip("Duplicate key issue with moto")
+        atoms = mda.Universe(reader.filename).select_atoms("index 1")
+        timeseries = reader.timeseries(atoms, order="fac")
+        assert timeseries.shape[0] == len(reader)
+        assert timeseries.shape[1] == len(atoms)
+        assert timeseries.shape[2] == 3
+
+    def test_timeseries_empty_asel(self, reader, ref):
+        if ref.trajectory.startswith("s3") and ref.trajectory.endswith(
+            ".zarrmd"
+        ):
+            pytest.skip("Duplicate key issue with moto")
+        with pytest.warns(
+            UserWarning,
+            match="Empty string to select atoms, empty group returned.",
+        ):
+            atoms = mda.Universe(reader.filename).select_atoms(None)
+        with pytest.raises(ValueError, match="Timeseries requires at least"):
+            reader.timeseries(asel=atoms)
+
+    def test_timeseries_empty_atomgroup(self, reader, ref):
+        if ref.trajectory.startswith("s3") and ref.trajectory.endswith(
+            ".zarrmd"
+        ):
+            pytest.skip("Duplicate key issue with moto")
+        with pytest.warns(
+            UserWarning,
+            match="Empty string to select atoms, empty group returned.",
+        ):
+            atoms = mda.Universe(reader.filename).select_atoms(None)
+        with pytest.raises(ValueError, match="Timeseries requires at least"):
+            reader.timeseries(atomgroup=atoms)
+
+    def test_timeseries_asel_warns_deprecation(self, reader, ref):
+        if ref.trajectory.startswith("s3") and ref.trajectory.endswith(
+            ".zarrmd"
+        ):
+            pytest.skip("Duplicate key issue with moto")
+        atoms = mda.Universe(reader.filename).select_atoms("index 1")
+        with pytest.warns(DeprecationWarning, match="asel argument to"):
+            timeseries = reader.timeseries(asel=atoms, order="fac")
+
+    def test_timeseries_atomgroup(self, reader, ref):
+        if ref.trajectory.startswith("s3") and ref.trajectory.endswith(
+            ".zarrmd"
+        ):
+            pytest.skip("Duplicate key issue with moto")
+        atoms = mda.Universe(reader.filename).select_atoms("index 1")
+        timeseries = reader.timeseries(atomgroup=atoms, order="fac")
+
+    def test_timeseries_atomgroup_asel_mutex(self, reader, ref):
+        if ref.trajectory.startswith("s3") and ref.trajectory.endswith(
+            ".zarrmd"
+        ):
+            pytest.skip("Duplicate key issue with moto")
+        atoms = mda.Universe(reader.filename).select_atoms("index 1")
+        with pytest.raises(ValueError, match="Cannot provide both"):
+            timeseries = reader.timeseries(
+                atomgroup=atoms, asel=atoms, order="fac"
+            )
+
 
 # H5MD Format Reader Tests
 # Only test these with disk to avoid excessive test length
