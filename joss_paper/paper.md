@@ -56,7 +56,7 @@ download step would be more ideal.
 Enter `Zarrtraj`, an `MDAnalysis` [@MDAnalysis:2016] `MDAKit` [@MDAKits:2023] which enables 
 streaming these trajectories from AWS S3, Google Cloud Buckets, and Azure Blob Storage and Data
 Lakes without ever downloading them using the standard `MDAnalysis` trajectory reader API.
-This is possible thanks to the `Zarr` [Zarr:2024] package which allows streaming array-like
+This is possible thanks to the `Zarr` [@Zarr:2024] package which allows streaming array-like
 data from a variety of storage mediums and `Kerchunk`, which extends the capability of `Zarr`
 by allowing it to read `HDF5` files in addition to `Zarr` files. Trajectory data can be streamed
 in the `H5MD` format [@H5MD:2014], which builds on top of `HDF5`, and the experimental `ZarrMD` format,
