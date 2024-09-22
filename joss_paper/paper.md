@@ -34,7 +34,7 @@ bibliography: paper.bib
 # Summary
 
 Molecular dynamics simulations provide a microscope into the behavior of 
-atomic-scale environments otherwise prohibitively diffult to observe, however,
+atomic-scale environments otherwise prohibitively difficult to observe, however,
 the resulting trajectory data is too often siloed in a single institutions' 
 HPC environment, rendering it unusable by the broader scientific community.
 Zarrtraj enables these trajectories to be read directly from cloud storage providers
@@ -50,7 +50,7 @@ molecular dynamics trajectory data for analysis. Instead, the speed of writing t
 the ability to share generated data provide new constraints on research in this field.
 While exposing download links on the open internet offers one solution this problem,
 molecular dynamics trajectories are often massive files which are slow to download and expensive
-to store at scale, so a solution which could prevent this duplication of storage and uneccessary 
+to store at scale, so a solution which could prevent this duplication of storage and unnecessary 
 download step would be more ideal.
 
 Enter `Zarrtraj`, an `MDAnalysis` [@MDAnalysis:2016] `MDAKit` [@MDAKits:2023] which enables 
