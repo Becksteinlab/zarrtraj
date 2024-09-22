@@ -46,7 +46,7 @@ trajectory data to anyone with an internet connection.
 
 The computing power in HPC environments has increased to the point where
 running simulation algorithms is often no longer the constraint in obtaining
-molecular dynamics trajectory data for analysis. Instead, the speed of writing to disk
+molecular dynamics trajectory data for analysis. Instead, the speed of writing to disk and
 the ability to share generated data provide new constraints on research in this field.
 While exposing download links on the open internet offers one solution this problem,
 molecular dynamics trajectories are often massive files which are slow to download and expensive
