@@ -13,9 +13,6 @@ authors:
   - name: Hugo Macdermott-Opeskin
     orcid: 0000-0002-7393-7457
     affiliation: 1
-  - name: Oliver Beckstein
-    orcid: 000-0003-1340-0831
-    affiliation: 1
   - name: Edis Jakupovic 
     affiliation: 1
   - name: Yuxuan Zhuang
@@ -24,6 +21,9 @@ authors:
   - name: Richard J Gowers
     orcid: 0000-0002-3241-1846
     affiliations: 1
+  - name: Oliver Beckstein
+    orcid: 000-0003-1340-0831
+    affiliation: 1
 affiliations:
  - name: Placeholder
    index: 1
@@ -91,7 +91,7 @@ u = mda.Universe("sample_topology.top", "s3://sample-bucket-name/trajectory.h5md
 Initial benchmarks show that `Zarrtraj` can iterate
 through an AWS S3 cloud trajectory (load into memory one frame at a time)
 at roughly 1/2 or 1/3 the speed it can iterate through the same trajectory from disk and roughly 
-1/5 to 1/10 the speed it can iterate through the same trajectory in XTC format \autoref{fig:benchmark}.
+1/5 to 1/10 the speed it can iterate through the same trajectory on disk in XTC format \autoref{fig:benchmark}.
 However, it should be noted that this speed is influenced by network latency and that
 writing parallelized algorithms can offset this loss of speed.
 
