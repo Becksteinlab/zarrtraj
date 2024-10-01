@@ -115,7 +115,6 @@ geosciences community to align data practices with FAIR principles [@PANGEO:2022
 # Acknowledgements
 Thank you to Dr. Jenna Swarthout Goddard for supporting the GSoC program at MDAnalysis. 
 Thank you to Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream codebase 
-necessary for this project. Finally, thank you to Google for supporting the Google Summer of 
-Code program (GSoC) which provided financial support for this project.
+necessary for this project. LW was a participant in the Google Summer of Code 2024 program.
 
 # References
