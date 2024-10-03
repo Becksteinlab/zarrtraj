@@ -126,7 +126,7 @@ u = mda.Universe("topology.pdb", "s3://sample-bucket-name/trajectory.h5md")
 Initial benchmarks show that *Zarrtraj* can iterate serially
 through an AWS S3 cloud trajectory (load into memory one frame at a time)
 at roughly 1/2 or 1/3 the speed it can iterate through the same trajectory from disk and roughly 
-1/5 to 1/10 the speed it can iterate through the same trajectory on disk in XTC format \autoref{fig:benchmark}.
+1/5 to 1/10 the speed it can iterate through the same trajectory on disk in XTC format (\autoref{fig:benchmark}).
 However, it should be noted that this speed is influenced by network latency and that
 writing parallelized algorithms can offset this loss of speed as in \autoref{fig:RMSD}. 
 
