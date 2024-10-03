@@ -16,7 +16,7 @@ authors:
     affiliation: [1, 2]
   - name: Yuxuan Zhuang
     orcid: 0000-0003-4390-8556
-    affiliations: [5, 6]
+    affiliation: [5, 6]
   - name: Richard J Gowers
     orcid: 0000-0002-3241-1846
   - name: Oliver Beckstein
@@ -127,7 +127,7 @@ Initial benchmarks show that *Zarrtraj* can iterate serially
 through an AWS S3 cloud trajectory (load into memory one frame at a time)
 at roughly 1/2 or 1/3 the speed it can iterate through the same trajectory from disk and roughly 
 1/5 to 1/10 the speed it can iterate through the same trajectory on disk in XTC format (\autoref{fig:benchmark}).
-However, it should be noted that this speed is influenced by network latency and that
+However, it should be noted that this speed is influenced by network bandwidth and that
 writing parallelized algorithms can offset this loss of speed as in \autoref{fig:RMSD}. 
 
 ![Benchmarks performed on a machine with 2 Intel Xeon 2.00GHz CPUs, 32GB of RAM, and an SSD configured with RAID 0. The trajectory used for benchmarking was the YiiP trajectory from MDAnalysisData [@YiiP:2019], a 9000-frame (90ns), 111,815 particle simulation of a membrane-protein system. The original 3.47GB XTC trajectory was converted into an uncompressed 11.3GB H5MD trajectory and an uncompressed 11.3GB ZarrMD trajectory using the MDAnalysis `H5MDWriter` and *Zarrtraj* `ZarrMD` writers, respectively. XTC trajectory read using the MDAnalysis `XTCReader` for comparison. \label{fig:benchmark}](benchmark.png)
