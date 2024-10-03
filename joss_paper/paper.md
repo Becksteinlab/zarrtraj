@@ -59,14 +59,22 @@ The computing power in HPC environments has increased to the point where
 running simulation algorithms is often no longer the constraint in
 obtaining scientific insights from molecular dynamics trajectory data. 
 Instead, the ability to process, analyze and share large volumes of data provide 
-new constraints on research in this field.
+new constraints on research in this field [@SharingMD:2019].
 
 Other groups in the field recognize this same need for adherence to 
-FAIR principles [@FAIR:2019] including the MDDB (Molecular Dynamics Data Bank), an EU-scale 
-repository for biosimulation data [@MDDB:2024] and MDverse, a prototype search engine 
-for publicly-available GROMACS simulation data [@MDverse:2024].
-While these efforts currently offer prototype solutions for indexing and 
-searching MD trajectory data, the problem of efficiently distributing the data remains. 
+FAIR principles [@FAIR:2019] including 
+MDsrv, a tool that can stream MD trajectories into a web browser for visual exploration [@MDsrv:2022], 
+GCPRmd, a web service that builds on MDsrv to provide a predefined set of analysis results and simple 
+geometric features for G-protein-coupled receptors [@GPCRmd:2019] [@GPCRome:2020], 
+MDDB (Molecular Dynamics Data Bank), an EU-scale 
+repository for biosimulation data [@MDDB:2024],
+and MDverse, a prototype search engine 
+for publicly-available GROMACS simulation data [@MDverse:2024]. 
+
+While these efforts currently offer solutions for indexing,
+searching, and vizualizing MD trajectory data, the problem of distributing trajectories 
+in way that enables *NumPy*-like slicing and parallel reading for use in arbitrary analysis 
+tasks remains.
 
 Though exposing download links on the open internet offers a simple solution to this problem,
 on-disk representations of molecular dynamics trajectories often range in size 
@@ -84,12 +92,28 @@ This is possible thanks to the *Zarr* [@Zarr:2024] package which allows
 streaming array-like data from a variety of storage mediums and [Kerchunk](https://github.com/fsspec/kerchunk), 
 which extends the capability of *Zarr* by allowing it to read HDF5 files.
 Because it implements the standard MDAnalysis trajectory reader API,
-*Zarrtraj* can leverage *Zarr*'s ability to read a slice of a file and even 
+*Zarrtraj* can leverage *Zarr*'s ability to read a slice of a file and 
 to read a file in parallel, making it compatible with
 analysis algorithms that use the "split-apply-combine" parallelization strategy [@SplitApplyCombine:2011].
 In addition to the H5MD format, 
 *Zarrtraj* can stream and write trajectories in the experimental ZarrMD
 format, which ports the H5MD layout to the *Zarr* filetype.
+
+This work builds on the existing MDAnalysis `H5MDReader`
+[@H5MDReader:2021], and similarly uses *NumPy* [@NumPy:2020] as a common interface in-between MDAnalysis
+and the file storage medium. *Zarrtraj* was inspired and made possible by similar efforts in the 
+geosciences community to align data practices with FAIR principles [@PANGEO:2022].
+
+With *Zarrtraj*, we envision research groups making their data publicly available 
+via a cloud URL so that anyone can reuse their trajectories and reproduce their results.
+Large databases, like MDDB and MDverse, can expose a URL associated with each 
+trajectory in their databases so that users can make a query and immediately use the resulting
+trajectories to run an analysis on the hits that match their search. Groups seeking to 
+collect a large volume of trajectory data to train machine learning models [@MLMDMethods:2023] can make use
+of our tool to efficiently and inexpensively obtain the data they need from these published 
+URLs.
+
+# Features and Benchmarks
 
 Once imported, *Zarrtraj* allows passing trajectory URLs just like ordinary files:
 ```python
@@ -98,6 +122,7 @@ import MDAnalysis as mda
 
 u = mda.Universe("topology.pdb", "s3://sample-bucket-name/trajectory.h5md")
 ```
+
 Initial benchmarks show that *Zarrtraj* can iterate serially
 through an AWS S3 cloud trajectory (load into memory one frame at a time)
 at roughly 1/2 or 1/3 the speed it can iterate through the same trajectory from disk and roughly 
@@ -115,24 +140,11 @@ to just 4.9GB after compression with the Zstandard algorithm [@Zstandard:2021]
 and quantization to 3 digits of precision. See [performance considerations](https://zarrtraj.readthedocs.io/en/latest/performance_considerations.html)
 for more.
 
-This work builds on the existing MDAnalysis `H5MDReader`
-[@H5MDReader:2021], and similarly uses *NumPy* [@NumPy:2020] as a common interface in-between MDAnalysis
-and the file storage medium. *Zarrtraj* was inspired and made possible by similar efforts in the 
-geosciences community to align data practices with FAIR principles [@PANGEO:2022].
-
-With *Zarrtraj*, we envision research groups making their data publicly available 
-via a cloud URL so that anyone can reuse their trajectories and reproduce their results.
-Large databases, like MDDB and MDverse, can expose a URL associated with each 
-trajectory in their databases so that users can make a query and immediately use the resulting
-trajectories to run an analysis on the hits that match their search. Groups seeking to 
-collect a large volume of trajectory data to train machine learning models [@MLMDMethods:2023] can make use
-of our tool to efficiently and inexpensively obtain the data they need from these published 
-URLs.
-
 
 # Acknowledgements
-We thank Dr. Jenna Swarthout Goddard for supporting the GSoC program at MDAnalysis. 
-We also thank Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream codebase 
+
+We thank Dr. Jenna Swarthout Goddard for supporting the GSoC program at MDAnalysis and 
+Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream codebase 
 necessary for this project. LW was a participant in the Google Summer of Code 2024 program.
 
 # References
