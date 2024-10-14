@@ -41,7 +41,7 @@ Zarrtraj is bound by a [Code of Conduct](https://github.com/Becksteinlab/zarrtra
 ### Copyright
 
 The Zarrtraj source code is hosted at https://github.com/Becksteinlab/zarrtraj
-and is available under the GNU General Public License, version 2 (see the file [LICENSE](https://github.com/Becksteinlab/zarrtraj/blob/main/LICENSE)).
+and is available under the GNU General Public License, version 3 (see the file [LICENSE](https://github.com/Becksteinlab/zarrtraj/blob/main/LICENSE)).
 
 Copyright (c) 2024, Lawson Woods
 
