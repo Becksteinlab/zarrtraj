@@ -16,9 +16,9 @@ This means users can interact with massive trajectory files without ever storing
    :caption: Contents:
 
    installation
+   yiip_example
    walkthrough
    api
    performance_considerations
-   zarrmd-file-spec/v0.2.0
    benchmarks
 

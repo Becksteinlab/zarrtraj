@@ -9,32 +9,35 @@ tags:
 authors:
   - name: Lawson Woods
     orcid: 0009-0003-0713-4167
-    affiliation: [3, 4]
-  - name: Hugo Macdermott-Opeskin
-    orcid: 0000-0002-7393-7457
-  - name: Edis Jakupovic 
     affiliation: [1, 2]
+  - name: Hugo MacDermott-Opeskin
+    orcid: 0000-0002-7393-7457
+    affiliation: [3]
+  - name: Edis Jakupovic 
+    affiliation: [4, 5]
   - name: Yuxuan Zhuang
     orcid: 0000-0003-4390-8556
-    affiliation: [5, 6]
+    affiliation: [6, 7]
   - name: Richard J Gowers
     orcid: 0000-0002-3241-1846
   - name: Oliver Beckstein
     orcid: 000-0003-1340-0831
-    affiliation: [1, 2]
+    affiliation: [4, 5]
 affiliations:
- - name: Department of Physics, Arizona State University, Tempe, Arizona, United States of America
-   index: 1
- - name: Center for Biological Physics, Arizona State University, Tempe, AZ, United States of America
-   index: 2
  - name: School of Computing and Augmented Intelligence, Arizona State University, Tempe, Arizona, United States of America
-   index: 3
+   index: 1
  - name: School of Molecular Sciences, Arizona State University, Tempe, Arizona, United States of America
+   index: 2
+ - name: Open Molecular Software Foundation, Davis, CA, United States of America
+   index: 3
+ - name: Center for Biological Physics, Arizona State University, Tempe, AZ, United States of America
    index: 4
- - name: Department of Computer Science, Stanford University, Stanford, CA 94305, USA.
+ - name: Department of Physics, Arizona State University, Tempe, Arizona, United States of America
    index: 5
- - name: Departments of Molecular and Cellular Physiology and Structural Biology, Stanford University School of Medicine, Stanford, CA 94305, USA.
+ - name: Department of Computer Science, Stanford University, Stanford, CA 94305, USA.
    index: 6
+ - name: Departments of Molecular and Cellular Physiology and Structural Biology, Stanford University School of Medicine, Stanford, CA 94305, USA.
+   index: 7
 date: 22 September 2024
 bibliography: paper.bib
 ---
@@ -140,6 +143,10 @@ to just 4.9GB after compression with the Zstandard algorithm [@Zstandard:2021]
 and quantization to 3 digits of precision. See [performance considerations](https://zarrtraj.readthedocs.io/en/latest/performance_considerations.html)
 for more.
 
+# Example
+
+The YiiP membrane protein trajectory [@YiiP:2019] used for benchmarking in this paper is publicly available for streaming from the Google Cloud Bucket *"gcs://zarrtraj-test-data"*. To access it, 
+follow the up-to-date instructions [here](https://zarrtraj.readthedocs.io/en/latest/yiip_example.html).
 
 # Acknowledgements
 
