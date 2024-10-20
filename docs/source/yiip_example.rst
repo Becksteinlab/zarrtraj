@@ -26,5 +26,6 @@ To access the trajectory, follow this example:
 
 
 While there is not yet an officially recommended way to access cloud-stored topologies, this
-method of opening a Python `File`-like object from the topology URL in PDB format using *FSSpec*
+method of opening a Python `File`-like object from the topology URL in PDB format using 
+`FSSpec <https://filesystem-spec.readthedocs.io/en/latest/>`_
 works with MDAnalysis 2.7.0. Check back later for further development!
