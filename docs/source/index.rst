@@ -20,5 +20,6 @@ This means users can interact with massive trajectory files without ever storing
    walkthrough
    api
    performance_considerations
+   zarrmd-file-spec/v0.2.0
    benchmarks
 
