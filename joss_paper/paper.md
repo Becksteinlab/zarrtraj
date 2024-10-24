@@ -156,14 +156,16 @@ paper is publicly available for streaming from the Google Cloud Bucket
 *gcs://zarrtraj-test-data/yiip.zarrmd*. The topology file in PDB format, which contains
 information about the chemical composition of the system, can also be accessed
 remotely from the same bucket (*gcs://zarrtraj-test-data/YiiP_system.pdb*) using
-[fsspec](https://filesystem-spec.readthedocs.io/en/latest/). 
+[fsspec](https://filesystem-spec.readthedocs.io/en/latest/), although this is
+currently an experimental feature and details may change.
 
-In the following example, we access the topology file and the trajectory from
-the *gcs://zarrtraj-test-data* cloud bucket. We initially create an
-`MDAnalysis.Universe`, the basic object in MDAnalysis that ties static topology
-data and dynamic trajectory data together and manages access to all data. We
-iterate through a slice of the trajectory, starting from frame index 100 and
-skipping forward in steps of 20 frames:
+In the following example (see also the [YiiP Example in the zarrtraj
+docs](https://zarrtraj.readthedocs.io/en/latest/yiip_example.html)), we access
+the topology file and the trajectory from the *gcs://zarrtraj-test-data* cloud
+bucket. We initially create an `MDAnalysis.Universe`, the basic object in
+MDAnalysis that ties static topology data and dynamic trajectory data together
+and manages access to all data. We iterate through a slice of the trajectory,
+starting from frame index 100 and skipping forward in steps of 20 frames:
 
 ```python
 import zarrtraj
