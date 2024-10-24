@@ -38,15 +38,15 @@ affiliations:
    index: 6
  - name: Departments of Molecular and Cellular Physiology and Structural Biology, Stanford University School of Medicine, Stanford, CA 94305, USA.
    index: 7
-date: 22 September 2024
+date: 23 October 2024
 bibliography: paper.bib
 ---
 
 # Summary
 
 Molecular dynamics (MD) simulations provide a microscope into the behavior of 
-atomic-scale environments otherwise prohibitively difficult to observe, however,
-the resulting trajectory data is too often siloed in a single institutions' 
+atomic-scale environments otherwise prohibitively difficult to observe. However,
+the resulting trajectory data are too often siloed in a single institutions' 
 HPC environment, rendering it unusable by the broader scientific community.
 Zarrtraj enables these trajectories to be read directly from cloud storage providers
 like AWS, Google Cloud, and Microsoft Azure into MDAnalysis, a popular Python 
@@ -70,40 +70,46 @@ MDsrv, a tool that can stream MD trajectories into a web browser for visual expl
 GCPRmd, a web service that builds on MDsrv to provide a predefined set of analysis results and simple 
 geometric features for G-protein-coupled receptors [@GPCRmd:2019] [@GPCRome:2020], 
 MDDB (Molecular Dynamics Data Bank), an EU-scale 
-repository for biosimulation data [@MDDB:2024],
+repository for bio-simulation data [@MDDB:2024],
 and MDverse, a prototype search engine 
 for publicly-available GROMACS simulation data [@MDverse:2024]. 
 
 While these efforts currently offer solutions for indexing,
-searching, and vizualizing MD trajectory data, the problem of distributing trajectories 
+searching, and visualizing MD trajectory data, the problem of distributing trajectories 
 in way that enables *NumPy*-like slicing and parallel reading for use in arbitrary analysis 
 tasks remains.
 
-Though exposing download links on the open internet offers a simple solution to this problem,
+Although exposing download links on the open internet offers a simple solution to this problem,
 on-disk representations of molecular dynamics trajectories often range in size 
-with large datasets up to TBs in scale [@ParallelAnalysis:2010] [@FoldingAtHome:2020],
+up to TBs in scale [@ParallelAnalysis:2010] [@FoldingAtHome:2020],
 so a solution which could prevent this 
 duplication of storage and unnecessary download step would provide greater utility 
-for the computational molecular sciences ecosystem.
+for the computational molecular sciences ecosystem, especially if it
+provides access to slices or subsampled portions of these large files.
 
-Enter *Zarrtraj*, the first fully-functioning tool to our knowledge that allows 
-streaming trajectories into analysis software using an established trajectory format.
-*Zarrtraj* is implemented as an MDAnalysis [@MDAnalysis:2016] MDAKit [@MDAKits:2023] that
-enables streaming MD trajectories in the popular HDF5-based H5MD format [@H5MD:2014]
-from AWS S3, Google Cloud Buckets, and Azure Blob Storage & Data Lakes without ever downloading them.
-This is possible thanks to the *Zarr* [@Zarr:2024] package which allows 
-streaming array-like data from a variety of storage mediums and [Kerchunk](https://github.com/fsspec/kerchunk), 
+To address this need, we developed *Zarrtraj* as a prototype for streaming
+trajectories into analysis software using an established trajectory
+format. *Zarrtraj* extends MDAnalysis [@MDAnalysis:2016], a popular
+Python-based library for the analysis of molecular simulation data in a wide
+range of formats, to also accept remote file locations for trajectories instead
+of local filenames. Instead of being integrated directly into MDAnalysis,
+*Zarrtraj* is built as an external MDAKit [@MDAKits:2023] that automatically
+registers its capabilities with MDAnalysis on import and thus acts as a plugin.
+*Zarrtraj* enables streaming MD trajectories in the popular HDF5-based H5MD format [@H5MD:2014]
+from AWS S3, Google Cloud Buckets, and Azure Blob Storage and Data Lakes without ever downloading them.
+*Zarrtraj* relies on the *Zarr* [@Zarr:2024] package for 
+streaming array-like data from a variety of storage mediums and on [Kerchunk](https://github.com/fsspec/kerchunk), 
 which extends the capability of *Zarr* by allowing it to read HDF5 files.
-Because it implements the standard MDAnalysis trajectory reader API,
-*Zarrtraj* can leverage *Zarr*'s ability to read a slice of a file and 
-to read a file in parallel, making it compatible with
-analysis algorithms that use the "split-apply-combine" parallelization strategy [@SplitApplyCombine:2011].
-In addition to the H5MD format, 
-*Zarrtraj* can stream and write trajectories in the experimental ZarrMD
-format, which ports the H5MD layout to the *Zarr* filetype.
+*Zarrtraj* leverages *Zarr*'s ability to read a slice of a file and to read a
+file in parallel and it implements the standard MDAnalysis trajectory reader
+API, which taken together make it compatible with analysis algorithms that use
+the "split-apply-combine" parallelization strategy [@SplitApplyCombine:2011].
+In addition to the H5MD format, *Zarrtraj* can stream and write trajectories in
+the experimental ZarrMD format, which ports the H5MD layout to the *Zarr*
+file type.
 
 This work builds on the existing MDAnalysis `H5MDReader`
-[@H5MDReader:2021], and similarly uses *NumPy* [@NumPy:2020] as a common interface in-between MDAnalysis
+[@H5MDReader:2021], and uses *NumPy* [@NumPy:2020] as a common interface in-between MDAnalysis
 and the file storage medium. *Zarrtraj* was inspired and made possible by similar efforts in the 
 geosciences community to align data practices with FAIR principles [@PANGEO:2022].
 
@@ -151,7 +157,7 @@ follow the up-to-date instructions [here](https://zarrtraj.readthedocs.io/en/lat
 # Acknowledgements
 
 We thank Dr. Jenna Swarthout Goddard for supporting the GSoC program at MDAnalysis and 
-Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream codebase 
+Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream code base 
 necessary for this project. LW was a participant in the Google Summer of Code 2024 program.
 
 # References
