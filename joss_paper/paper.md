@@ -151,8 +151,63 @@ for more.
 
 # Example
 
-The YiiP membrane protein trajectory [@YiiP:2019] used for benchmarking in this paper is publicly available for streaming from the Google Cloud Bucket *"gcs://zarrtraj-test-data"*. To access it, 
-follow the up-to-date instructions [here](https://zarrtraj.readthedocs.io/en/latest/yiip_example.html).
+The YiiP membrane protein trajectory [@YiiP:2019] used for benchmarking in this
+paper is publicly available for streaming from the Google Cloud Bucket
+*gcs://zarrtraj-test-data/yiip.zarrmd*. The topology file in PDB format, which contains
+information about the chemical composition of the system, can also be accessed
+remotely from the same bucket (*gcs://zarrtraj-test-data/YiiP_system.pdb*) using
+[fsspec](https://filesystem-spec.readthedocs.io/en/latest/). 
+
+In the following example, we access the topology file and the trajectory from
+the *gcs://zarrtraj-test-data* cloud bucket. We initially create an
+`MDAnalysis.Universe`, the basic object in MDAnalysis that ties static topology
+data and dynamic trajectory data together and manages access to all data. We
+iterate through a slice of the trajectory, starting from frame index 100 and
+skipping forward in steps of 20 frames:
+
+```python
+import zarrtraj
+import MDAnalysis as mda
+import fsspec
+
+with fsspec.open("gcs://zarrtraj-test-data/YiiP_system.pdb", "r") as top:
+    u = mda.Universe(top, "gcs://zarrtraj-test-data/yiip.zarrmd", 
+	                 topology_format="PDB")
+
+    for ts in u.trajectory[100::20]:
+        print(ts)
+```
+
+Inside the loop over trajectory frames we print information for the current
+frame `ts` although in principle, any kind of analysis code can run here and
+process the coordinates available in `u.atoms.positions`.
+
+The `Universe` object can be used as if the underlying trajectory file were a
+local file. For example, we can use `u` from the preceeding example with one of
+the standard analysis tools in MDAnalysis, the calculation of the root mean
+square distance (RMSD) after optimal structural superposition [@Liu:2010] in
+the `MDAnalysis.analysis.rms.RMSD` class. In the example below we select only the
+C$_\alpha$ atoms of the protein with a MDAnalysis selection. We run the
+analysis with the `.run()` method while stepping through the trajectory at
+increments of 100 frames. We then print the first and last data point from the
+results array:
+
+```python
+>>> import MDAnalysis.analysis.rms
+>>> R = MDAnalysis.analysis.rms.RMSD(u, select="protein and name CA").run(step=100, verbose=True)
+100%|██████████████████████████████████████████| 91/91 [00:28<00:00,  3.21it/s]
+>>> print(f"Initial RMSD (frame={R.results.rmsd[0, 0]:g}): {R.results.rmsd[0, 2]:.3f} Å")
+Initial RMSD (frame=0) : 0.000 Å
+>>> print(f"Final RMSD (frame={R.results.rmsd[-1, 0]:g}): {R.results.rmsd[-1, 2]:.3f} Å")
+Final RMSD (frame=9000) : 2.373 Å
+```
+
+This example demonstrates that the *Zarrtraj* interface enables seamless use of
+cloud-hosted trajectories with the standard tools that are either available
+with MDAnalysis itself, through MDAKits [@MDAKits:2023] (see the [MDAKit
+registry](https://mdakits.mdanalysis.org/mdakits.html) for available packages),
+or any script or package that uses MDAnalysis for file I/O.
+
 
 # Acknowledgements
 
