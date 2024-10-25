@@ -21,7 +21,7 @@ authors:
   - name: Richard J Gowers
     orcid: 0000-0002-3241-1846
   - name: Oliver Beckstein
-    orcid: 000-0003-1340-0831
+    orcid: 0000-0003-1340-0831
     affiliation: [4, 5]
 affiliations:
  - name: School of Computing and Augmented Intelligence, Arizona State University, Tempe, Arizona, United States of America
