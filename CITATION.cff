@@ -16,29 +16,29 @@ authors:
       School of Computing and Augmented Intelligence,
       Arizona State University, Tempe, Arizona, United
       States of America
-  - given-names: 'Hugo '
+  - given-names: Hugo 
     family-names: MacDermott-Opeskin
     orcid: 'https://orcid.org/0000-0002-7393-7457'
     affiliation: >-
       Open Molecular Software Foundation, Davis, CA, United
       States of America
     email: hugomacdermott-opeskin@mdanalysis.org
-  - given-names: 'Edis '
-    family-names: 'Jakupovic '
+  - given-names: Edis
+    family-names: Jakupovic
     affiliation: >-
       Center for Biological Physics, Arizona State
       University, Tempe, AZ, United States of America
-  - given-names: 'Yuxuan '
+  - given-names: Yuxuan
     orcid: 'https://orcid.org/0000-0003-4390-8556'
     family-names: Zhuang
     affiliation: >-
       Department of Computer Science, Stanford University,
       Stanford, CA 94305, USA.
-  - given-names: 'Richard '
+  - given-names: Richard
     orcid: 'https://orcid.org/0000-0002-3241-1846'
     family-names: Gowers
-    name-particle: 'J '
-  - given-names: 'Oliver '
+    name-particle: J
+  - given-names: Oliver
     family-names: Beckstein
     affiliation: >-
       Center for Biological Physics, Arizona State
