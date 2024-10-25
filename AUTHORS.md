@@ -7,6 +7,9 @@ All contributing authors are listed in this file below.
 The repository history at https://github.com/ljwoods2/zarrtraj
 and the CHANGELOG show individual code contributions.
 
+New contributors should add themselves to the end of this file AND to
+the file CITATION.cff at the end of the top-level authors list.
+
 ## Chronological list of authors
 
 <!--

@@ -1,0 +1,63 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: 'Zarrtraj: A Python package for streaming molecular dynamics trajectories from cloud services'
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Lawson
+    email: lawsonw84@gmail.com
+    family-names: Woods
+    orcid: 'https://orcid.org/0009-0003-0713-4167'
+    affiliation: >-
+      School of Computing and Augmented Intelligence,
+      Arizona State University, Tempe, Arizona, United
+      States of America
+  - given-names: 'Hugo '
+    family-names: MacDermott-Opeskin
+    orcid: 'https://orcid.org/0000-0002-7393-7457'
+    affiliation: >-
+      Open Molecular Software Foundation, Davis, CA, United
+      States of America
+    email: hugomacdermott-opeskin@mdanalysis.org
+  - given-names: 'Edis '
+    family-names: 'Jakupovic '
+    affiliation: >-
+      Center for Biological Physics, Arizona State
+      University, Tempe, AZ, United States of America
+  - given-names: 'Yuxuan '
+    orcid: 'https://orcid.org/0000-0003-4390-8556'
+    family-names: Zhuang
+    affiliation: >-
+      Department of Computer Science, Stanford University,
+      Stanford, CA 94305, USA.
+  - given-names: 'Richard '
+    orcid: 'https://orcid.org/0000-0002-3241-1846'
+    family-names: Gowers
+    name-particle: 'J '
+  - given-names: 'Oliver '
+    family-names: Beckstein
+    affiliation: >-
+      Center for Biological Physics, Arizona State
+      University, Tempe, AZ, United States of America
+    orcid: 'https://orcid.org/0000-0003-1340-0831'
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.13887976
+repository-code: 'https://github.com/Becksteinlab/zarrtraj'
+url: 'https://zarrtraj.readthedocs.io/en/latest/index.html'
+abstract: >-
+  Zarrtraj is an MDAnalysis MDAKit for streaming H5MD and
+  ZarrMD trajectory files from cloud storage like AWS S3,
+  Google Cloud Buckets, and Azure Data lakes and Blob
+  Storage
+keywords:
+  - streaming
+  - molecular-dynamics
+  - file-format
+  - mdanalysis
+  - zarr
+license: GPL-3.0-or-later
