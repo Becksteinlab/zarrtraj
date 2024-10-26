@@ -216,5 +216,6 @@ or any script or package that uses MDAnalysis for file I/O.
 We thank Dr. Jenna Swarthout Goddard for supporting the GSoC program at MDAnalysis and 
 Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream code base 
 necessary for this project. LW was a participant in the Google Summer of Code 2024 program.
+Some work on *Zarrtraj* was supported by the National Science Foundation under grant number 2311372.
 
 # References
