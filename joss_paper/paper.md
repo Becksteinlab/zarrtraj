@@ -48,7 +48,7 @@ Molecular dynamics (MD) simulations provide a microscope into the behavior of
 atomic-scale environments otherwise prohibitively difficult to observe. However,
 the resulting trajectory data are too often siloed in a single institutions' 
 HPC environment, rendering it unusable by the broader scientific community.
-Zarrtraj enables these trajectories to be read directly from cloud storage providers
+*Zarrtraj* enables these trajectories to be read directly from cloud storage providers
 like AWS, Google Cloud, and Microsoft Azure into MDAnalysis, a popular Python 
 package for analyzing trajectory data, providing a method to open up access to
 trajectory data to anyone with an internet connection. Enabling cloud streaming
