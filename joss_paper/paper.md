@@ -20,6 +20,7 @@ authors:
     affiliation: [6, 7]
   - name: Richard J Gowers
     orcid: 0000-0002-3241-1846
+    affiliation: [8]
   - name: Oliver Beckstein
     orcid: 0000-0003-1340-0831
     affiliation: [4, 5]
@@ -38,6 +39,8 @@ affiliations:
    index: 6
  - name: Departments of Molecular and Cellular Physiology and Structural Biology, Stanford University School of Medicine, Stanford, CA 94305, USA.
    index: 7
+ - name: Charm Therapeutics, London, United Kingdom
+   index: 8
 date: 23 October 2024
 bibliography: paper.bib
 ---
