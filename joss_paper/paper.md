@@ -51,6 +51,8 @@ Molecular dynamics (MD) simulations provide a microscope into the behavior of
 atomic-scale environments otherwise prohibitively difficult to observe. However,
 the resulting trajectory data are too often siloed in a single institutions' 
 HPC environment, rendering it unusable by the broader scientific community.
+Additionally, it is increasingly common for trajectory data to be entirely 
+stored in a cloud storage provider, rather than a traditional on-premise storage site.
 *Zarrtraj* enables these trajectories to be read directly from cloud storage providers
 like AWS, Google Cloud, and Microsoft Azure into MDAnalysis, a popular Python 
 package for analyzing trajectory data, providing a method to open up access to
@@ -179,12 +181,12 @@ with fsspec.open("gcs://zarrtraj-test-data/YiiP_system.pdb", "r") as top:
     u = mda.Universe(top, "gcs://zarrtraj-test-data/yiip.zarrmd", 
 	                 topology_format="PDB")
 
-    for ts in u.trajectory[100::20]:
-        print(ts)
+    for timestep in u.trajectory[100::20]:
+        print(timestep)
 ```
 
 Inside the loop over trajectory frames we print information for the current
-frame `ts` although in principle, any kind of analysis code can run here and
+frame `timestep` although in principle, any kind of analysis code can run here and
 process the coordinates available in `u.atoms.positions`.
 
 The `Universe` object can be used as if the underlying trajectory file were a
@@ -217,7 +219,7 @@ or any script or package that uses MDAnalysis for file I/O.
 # Acknowledgements
 
 We thank Dr. Jenna Swarthout Goddard for supporting the GSoC program at MDAnalysis and 
-Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream code base 
+Dr. Martin Durant, author of Kerchunk, for helping refine and merge features in his upstream code base 
 necessary for this project. LW was a participant in the Google Summer of Code 2024 program.
 Some work on *Zarrtraj* was supported by the National Science Foundation under grant number 2311372.
 
