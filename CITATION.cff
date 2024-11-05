@@ -25,6 +25,7 @@ authors:
     email: hugomacdermott-opeskin@mdanalysis.org
   - given-names: Edis
     family-names: Jakupovic
+    orcid: 'https://orcid.org/0000-0001-8813-6356'
     affiliation: >-
       Center for Biological Physics, Arizona State
       University, Tempe, AZ, United States of America
@@ -38,6 +39,7 @@ authors:
     orcid: 'https://orcid.org/0000-0002-3241-1846'
     family-names: Gowers
     name-particle: J
+    affiliation: Charm Therapeutics, London, United Kingdom
   - given-names: Oliver
     family-names: Beckstein
     affiliation: >-

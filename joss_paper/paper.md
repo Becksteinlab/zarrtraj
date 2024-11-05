@@ -15,6 +15,7 @@ authors:
     affiliation: [3]
   - name: Edis Jakupovic 
     affiliation: [4, 5]
+    orcid: 0000-0001-8813-6356
   - name: Yuxuan Zhuang
     orcid: 0000-0003-4390-8556
     affiliation: [6, 7]
