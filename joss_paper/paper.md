@@ -202,11 +202,14 @@ results array:
 
 ```python
 >>> import MDAnalysis.analysis.rms
->>> R = MDAnalysis.analysis.rms.RMSD(u, select="protein and name CA").run(step=100, verbose=True)
+>>> R = MDAnalysis.analysis.rms.RMSD(u, select="protein and name CA").run(
+                                     step=100, verbose=True)
 100%|██████████████████████████████████████████| 91/91 [00:28<00:00,  3.21it/s]
->>> print(f"Initial RMSD (frame={R.results.rmsd[0, 0]:g}): {R.results.rmsd[0, 2]:.3f} Å")
+>>> print(f"Initial RMSD (frame={R.results.rmsd[0, 0]:g}): "
+          f"{R.results.rmsd[0, 2]:.3f} Å")
 Initial RMSD (frame=0) : 0.000 Å
->>> print(f"Final RMSD (frame={R.results.rmsd[-1, 0]:g}): {R.results.rmsd[-1, 2]:.3f} Å")
+>>> print(f"Final RMSD (frame={R.results.rmsd[-1, 0]:g}): "
+          f"{R.results.rmsd[-1, 2]:.3f} Å")
 Final RMSD (frame=9000) : 2.373 Å
 ```
 
