@@ -15,6 +15,14 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.3.0] 2024-10-24
+
+## Authors
+- ljwoods2
+
+## Added
+- added CITATION.cff file (issue #69, PR #68)
+
 ## [0.2.1] 2024-07-28
 
 
