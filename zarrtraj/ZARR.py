@@ -1085,12 +1085,12 @@ class ZARRMDWriter(base.WriterBase):
         if not HAS_ZARR:
             raise RuntimeError("Please install zarr")
         if n_atoms == 0:
-            raise ValueError("H5MDWriter: no atoms in output trajectory")
+            raise ValueError("ZARRH5MDWriter: no atoms in output trajectory")
 
         self.n_atoms = n_atoms
         if n_frames is not None and n_frames <= 0:
             raise ValueError(
-                "H5MDWriter: Please provide a positive value for 'n_frames' kwarg"
+                "ZARRH5MDWriter: Please provide a positive value for 'n_frames' kwarg"
             )
         self.n_frames = n_frames
         self.storage_options = storage_options
@@ -1163,7 +1163,7 @@ class ZARRMDWriter(base.WriterBase):
 
         if ts.n_atoms != self.n_atoms:
             raise IOError(
-                "H5MDWriter: Timestep does not have"
+                "ZARRH5MDWriter: Timestep does not have"
                 " the correct number of atoms"
             )
 
@@ -1364,8 +1364,8 @@ class ZARRMDWriter(base.WriterBase):
                     self._obsv = self._file["observables/trajectory"]
                 self._obsv.require_group(obsv)
                 self._elements[obsv] = H5MDElementBuffer(
-                    ts.data[obsv].shape,
-                    ts.data[obsv].dtype,
+                    np.asarray(ts.data[obsv]).shape,
+                    np.asarray(ts.data[obsv]).dtype,
                     self.n_frames,
                     self._obsv[obsv],
                     t_unit=self.units["time"],
@@ -1489,13 +1489,13 @@ class ZARRMDWriter(base.WriterBase):
                 # issue a warning if counter is less or more than n_frames
                 if self._counter < self.n_frames:
                     warnings.warn(
-                        f"H5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
+                        f"ZARRH5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
                         f"only {self._counter} frame(s) were written to the trajectory.",
                         RuntimeWarning,
                     )
                 if self._counter >= self.n_frames:
                     warnings.warn(
-                        f"H5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
+                        f"ZARRH5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
                         f"{self._counter} frame(s) were written to the trajectory.",
                         RuntimeWarning,
                     )

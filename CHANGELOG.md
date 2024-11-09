@@ -15,6 +15,15 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.3.1]
+
+## Authors
+- ljwoods2
+
+### Fixed
+- Fixed ZARRH5MDWriter bug which caused writer to fail unexpectedly on
+  writing scalar ts.data attributes
+
 ## [0.3.0] 2024-10-24
 
 ## Authors
