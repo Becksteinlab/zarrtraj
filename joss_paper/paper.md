@@ -9,22 +9,22 @@ tags:
 authors:
   - name: Lawson Woods
     orcid: 0009-0003-0713-4167
-    affiliation: [1, 2]
+    affiliation: "1, 2"
   - name: Hugo MacDermott-Opeskin
     orcid: 0000-0002-7393-7457
-    affiliation: [3]
+    affiliation: "3"
   - name: Edis Jakupovic 
-    affiliation: [4, 5]
+    affiliation: "4, 5"
     orcid: 0000-0001-8813-6356
   - name: Yuxuan Zhuang
     orcid: 0000-0003-4390-8556
-    affiliation: [6, 7]
+    affiliation: "6, 7"
   - name: Richard J Gowers
     orcid: 0000-0002-3241-1846
-    affiliation: [8]
+    affiliation: "8"
   - name: Oliver Beckstein
     orcid: 0000-0003-1340-0831
-    affiliation: [4, 5]
+    affiliation: "4, 5"
 affiliations:
  - name: School of Computing and Augmented Intelligence, Arizona State University, Tempe, Arizona, United States of America
    index: 1
