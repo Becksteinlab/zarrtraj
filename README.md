@@ -5,7 +5,7 @@ zarrtraj
 | **Latest release** | [![Last release tag][badge_release]][url_latest_release] ![GitHub commits since latest release (by date) for a branch][badge_commits_since]  [![Documentation Status][badge_docs]][url_docs]|
 | :----------------- | :------- |
 | **Status**         | [![GH Actions Status][badge_actions]][url_actions] [![codecov][badge_codecov]][url_codecov] |
-| **Community**      | [![License: MIT][badge_license]][url_license]  [![Powered by MDAnalysis][badge_mda]][url_mda]|
+| **Community**      | [![License: MIT][badge_license]][url_license]  [![Powered by MDAnalysis][badge_mda]][url_mda] [![Zenodo DOI](https://zenodo.org/badge/741693338.svg)](https://zenodo.org/badge/latestdoi/741693338) |
 
 [badge_actions]: https://github.com/Becksteinlab/zarrtraj/actions/workflows/gh-ci.yaml/badge.svg
 [badge_codecov]: https://codecov.io/gh/Becksteinlab/zarrtraj/branch/main/graph/badge.svg
