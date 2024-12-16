@@ -24,6 +24,9 @@ The rules for this file:
 - Fixed ZARRH5MDWriter bug which caused writer to fail unexpectedly on
   writing scalar ts.data attributes
 
+### Changed
+- Relicense to MIT (Issue #74)
+
 ## [0.3.0] 2024-10-24
 
 ## Authors
