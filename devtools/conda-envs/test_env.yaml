@@ -12,6 +12,7 @@ dependencies:
   - zarr>=2.11.0
   - kerchunk>=0.2.6
   - h5py>=3.11.0
+  - hdf5=1.12.1
 
   ### AWS dependencies ###
   # AWS reading/writing
