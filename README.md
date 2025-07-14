@@ -51,4 +51,3 @@ Copyright (c) 2024, Lawson Woods
 Project based on the 
 [MDAnalysis Cookiecutter](https://github.com/MDAnalysis/cookiecutter-mda) version 0.1.
 Please cite [MDAnalysis](https://github.com/MDAnalysis/mdanalysis#citation) when using Zarrtraj in published work.
-

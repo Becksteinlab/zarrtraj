@@ -23,6 +23,9 @@ The rules for this file:
 ### Fixed
 - Pinned Zarr<3.0 to avoid issues importing LRUCache (Issue #81, PR #80)
 
+### Changed
+- Added tests for Python 3.13 (Issue #84, PR #83)
+
 ## [0.3.1]
 
 ## Authors
