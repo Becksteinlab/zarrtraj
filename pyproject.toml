@@ -20,7 +20,7 @@ requires-python = ">=3.10.0"
 dependencies = [
     "MDAnalysis>=2.1.0",
     # Earliest zarr version where BaseStore has close() method
-    "zarr>=2.11.0", 
+    "zarr>=2.11.0,<3.0", 
     # Earliest version with preserved_linked_dsets
     "kerchunk>=0.2.6",
     # Earliest version with visititems_links

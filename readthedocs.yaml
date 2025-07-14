@@ -14,3 +14,7 @@ python:
 
 conda:
   environment: docs/requirements.yaml
+
+sphinx:
+  # https://about.readthedocs.com/blog/2024/12/deprecate-config-files-without-sphinx-or-mkdocs-config/
+  configuration: docs/source/conf.py

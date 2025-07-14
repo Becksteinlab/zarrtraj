@@ -15,6 +15,14 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.3.2]
+
+## Authors
+- ljwoods2
+
+### Fixed
+- Pinned Zarr<3.0 to avoid issues importing LRUCache (Issue #81, PR #80)
+
 ## [0.3.1]
 
 ## Authors
