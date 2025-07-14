@@ -113,7 +113,7 @@ jobs:
           ls -l dist
 
       - name: upload_source_and_wheels
-        uses: pypa/gh-action-pypi-publish@v1.9.0
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           skip-existing: true
           repository-url: https://test.pypi.org/legacy/
@@ -148,4 +148,4 @@ jobs:
           ls -l dist
 
       - name: upload_source_and_wheels
-        uses: pypa/gh-action-pypi-publish@v1.9.0
+        uses: pypa/gh-action-pypi-publish@v1.12.4
