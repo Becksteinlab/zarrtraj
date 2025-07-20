@@ -30,6 +30,6 @@ method of opening a Python `File`-like object from the topology URL in PDB forma
 works with MDAnalysis 2.7.0. Check back later for further development!
 
 To see an executable example of running an MDAnalysis 
-`RMSD <https://docs.mdanalysis.org/1.1.1/documentation_pages/analysis/rms.html>` analysis on this 
+`RMSD <https://docs.mdanalysis.org/1.1.1/documentation_pages/analysis/rms.html>`_ analysis on this 
 trajectory in a jupyter notebook, see 
-`the example notebook on Github <https://github.com/Becksteinlab/zarrtraj/blob/main/examples/rmsd_yiip.ipynb>`.
+`the example notebook on Github <https://github.com/Becksteinlab/zarrtraj/blob/main/examples/rmsd_yiip.ipynb>`_.
