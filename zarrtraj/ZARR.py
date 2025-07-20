@@ -4,7 +4,7 @@ Example: Loading a .h5md file from disk
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To load a simulation from a ``.h5md`` trajectory file, pass a
-topology file and a path to the ``.zarrmd`` file to a
+topology file and a path to the ``.h5md`` file to a
 :class:`~MDAnalysis.core.universe.Universe`::
 
     import zarrtraj
