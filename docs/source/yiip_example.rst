@@ -1,10 +1,10 @@
 YiiP Protein Example
 ====================
 
-To get started immediately with *Zarrtraj*, we have made the topology and trajectory of the 
+To get started immediately with Zarrtraj, we have made the topology and trajectory of the 
 `YiiP protein in a POPC membrane <https://www.mdanalysis.org/MDAnalysisData/yiip_equilibrium.html>`_
-publicly available for streaming (no read/write credentials are needed as in :ref:`the walkthrough <_walkthrough>`). 
-The trajectory is stored in in the :ref:`ZarrMD format <_zarrmd>` for optimal streaming performance. 
+publicly available for streaming (no read/write credentials are needed as in :ref:`the walkthrough <walkthrough>`). 
+The trajectory is stored in in the :ref:`ZarrMD format <zarrmd>` for optimal streaming performance. 
 
 To access the trajectory, follow this example:
 

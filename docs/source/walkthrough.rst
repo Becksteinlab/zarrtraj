@@ -5,15 +5,15 @@ Walkthrough
 
 This walkthrough will guide you through the process of writing and then reading H5MD-formatted trajectories from cloud storage using 
 AWS S3 as an example. To learn more about reading and writing trajectories from different cloud storage providers, 
-including Google Cloud and Azure, see the :ref:`API documentation <_api>`.
+including Google Cloud and Azure, see the :ref:`API documentation <api>`.
 
-We will use the `YiiP 9ns trajectory from MDAnalysisData <https://www.mdanalysis.org/MDAnalysisData/yiip_equilibrium.html>`
+We will use the `YiiP 9ns trajectory from MDAnalysisData <https://www.mdanalysis.org/MDAnalysisData/yiip_equilibrium.html>`_
 as an example trajectory for the walkthrough.
 
 .. note:: 
-    In examples that read or write the :ref:`ZarrMD format <_zarrmd>`, `zarrtraj` is imported even though 
-    its namespace is not explicitly called. This is because MDAnalysis uses `meta classes for registering reader and writer formats <https://github.com/MDAnalysis/mdanalysis/blob/d412c9a9a56312c1bd4e33e6dd3afc4cec7783ca/package/MDAnalysis/coordinates/base.py>`,
-    so calling `import zarrtraj` allows MDAnalysis to use the classes provided by this package.
+    In examples that read or write the :ref:`ZarrMD format <zarrmd>`, `zarrtraj` is imported even though 
+    its namespace is not explicitly called. This is because MDAnalysis uses `meta classes for registering reader and writer formats <https://github.com/MDAnalysis/mdanalysis/blob/d412c9a9a56312c1bd4e33e6dd3afc4cec7783ca/package/MDAnalysis/coordinates/base.py>`_,
+    so calling ``import zarrtraj`` allows MDAnalysis to use the classes provided by this package.
 
 Writing trajectories to cloud storage
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -78,8 +78,8 @@ Uploading an H5MD file to an S3 bucket
 ######################################
 
 .. note:: 
-    Uploading H5MD trajectories programmatically to AWS S3 requires the `Boto3 package <https://github.com/boto/boto3>` to be installed.
-    This won't be installed by default with Zarrtraj because we recommend writing directly to S3 using the  :ref:`ZarrMD format <_zarrmd>`
+    Uploading H5MD trajectories programmatically to AWS S3 requires the `Boto3 package <https://github.com/boto/boto3>`_ to be installed.
+    This won't be installed by default with Zarrtraj because we recommend writing directly to S3 using the  :ref:`ZarrMD format <zarrmd>`
 
 MDAnalysis can write a trajectory from
 `any of its supported formats into H5MD <https://docs.mdanalysis.org/stable/documentation_pages/coordinates/H5MD.html>`_. 
