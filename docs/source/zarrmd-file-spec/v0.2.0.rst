@@ -1,6 +1,6 @@
 .. _zarrmd:
 
-Zarrmd specification
+ZarrMD specification
 ====================
 
 The `zarrmd` trajectory file format uses the H5MD file format as a directory structure and metadata 
