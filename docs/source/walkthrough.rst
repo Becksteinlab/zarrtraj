@@ -11,7 +11,7 @@ We will use the `YiiP 9ns trajectory from MDAnalysisData <https://www.mdanalysis
 as an example trajectory for the walkthrough.
 
 .. note:: 
-    In examples that read or write the :ref:`ZarrMD format <zarrmd>`, `zarrtraj` is imported even though 
+    In examples that read or write the :ref:`ZarrMD format <zarrmd>`, ``zarrtraj`` is imported even though 
     its namespace is not explicitly called. This is because MDAnalysis uses `meta classes for registering reader and writer formats <https://github.com/MDAnalysis/mdanalysis/blob/d412c9a9a56312c1bd4e33e6dd3afc4cec7783ca/package/MDAnalysis/coordinates/base.py>`_,
     so calling ``import zarrtraj`` allows MDAnalysis to use the classes provided by this package.
 
@@ -83,8 +83,8 @@ Uploading an H5MD file to an S3 bucket
 
 MDAnalysis can write a trajectory from
 `any of its supported formats into H5MD <https://docs.mdanalysis.org/stable/documentation_pages/coordinates/H5MD.html>`_. 
-Because the `H5MDWriter` (provided by MDAnalysis, not this package) does not automatically determine optimal chunks, we 
-recommend using the ```chunks``` kwarg with the MDAnalysis `H5MDWriter`` with a value that yields ~8-16MB chunks of data for best S3 performance.
+Because the ``H5MDWriter`` (provided by MDAnalysis, not this package) does not automatically determine optimal chunks, we 
+recommend using the ```chunks``` kwarg with the MDAnalysis ``H5MDWriter`` with a value that yields ~8-16MB chunks of data for best S3 performance.
 Once written locally, you can upload the trajectory to S3 programatically::
 
     import MDAnalysisData
