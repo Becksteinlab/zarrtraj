@@ -6,7 +6,7 @@ To get started immediately with Zarrtraj, we have made the topology and trajecto
 publicly available for streaming (no read/write credentials are needed as in :ref:`the walkthrough <walkthrough>`). 
 The trajectory is stored in in the :ref:`ZarrMD format <zarrmd>` for optimal streaming performance. 
 
-To access the trajectory, follow this example:
+To access the trajectory, you can copy and paste this code into a python script:
 
 .. code-block:: python 
 
