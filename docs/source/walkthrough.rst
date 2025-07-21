@@ -126,7 +126,7 @@ You can also upload the H5MD file directly using the AWS web interface by naviga
 "upload".
 
 Reading your H5MD file
-######################
+^^^^^^^^^^^^^^^^^^^^^^
 
 After the file is uploaded, you can use the same credentials to stream the file into MDAnalysis::
 
