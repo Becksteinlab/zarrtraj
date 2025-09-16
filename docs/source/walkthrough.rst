@@ -60,7 +60,7 @@ cloud storage reading speed and is not configurable by the user::
     os.environ["AWS_REGION"] = "us-west-1"
 
     if __name__ == "__main__":
-        dataset = MDAnalysisData.fetch_yiip_equilibrium_short()
+        dataset = MDAnalysisData.yiip_equilibrium.fetch_yiip_equilibrium_short()
 
         u = mda.Universe(dataset.topology, dataset.trajectory)
 
@@ -103,7 +103,7 @@ Once written locally, you can upload the trajectory to S3 programatically::
         response = s3_client.upload_file(file_name, bucket_name, obj_name)
 
     if __name__ == "__main__":
-        dataset = MDAnalysisData.fetch_yiip_equilibrium_short()
+        dataset = MDAnalysisData.yiip_equilibrium.fetch_yiip_equilibrium_short()
 
         u = mda.Universe(dataset.topology, dataset.trajectory)
 
