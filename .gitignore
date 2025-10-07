@@ -114,6 +114,7 @@ poetry.lock
 # benchmark stuff
 benchmarks/.asv
 benchmarks/testfiles/
+zarrtraj/data/yiip*
 
 # debugging
 tmp
