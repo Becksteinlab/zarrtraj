@@ -1493,7 +1493,7 @@ class ZARRMDWriter(base.WriterBase):
                         f"only {self._counter} frame(s) were written to the trajectory.",
                         RuntimeWarning,
                     )
-                if self._counter >= self.n_frames:
+                elif self._counter > self.n_frames:
                     warnings.warn(
                         f"ZARRH5MDWriter: `n_frames` kwarg set to {self.n_frames} but "
                         f"{self._counter} frame(s) were written to the trajectory.",
