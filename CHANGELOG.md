@@ -15,6 +15,11 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.3.3]
+
+### Fixed
+- Fixed erroneous warning thrown when correct number of frames was written (PR #88)
+
 ## [0.3.2]
 
 ## Authors
