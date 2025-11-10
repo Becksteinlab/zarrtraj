@@ -15,6 +15,15 @@ The rules for this file:
     * YYYY-MM-DD date format (following ISO 8601)
   * accompany each entry with github issue/PR number (Issue #xyz)
 -->
+## [0.3.4]
+
+## Authors
+- ljwoods2
+
+### Fixed
+- Dropped support for Python 3.10 and added support for 3.14
+
+
 ## [0.3.3]
 
 ### Fixed
