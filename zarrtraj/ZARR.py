@@ -1216,11 +1216,8 @@ class ZARRMDWriter(base.WriterBase):
                 )
 
     def _open_file(self):
-        storage_options = (
-            dict() if self.storage_options is None else self.storage_options
-        )
         self._file = zarr.open_group(
-            self.filename, storage_options=storage_options, mode="w"
+            self.filename, storage_options=self.storage_options, mode="w"
         )
 
         # fill in H5MD metadata from kwargs
