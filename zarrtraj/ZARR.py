@@ -128,7 +128,7 @@ Classes
    :members:
    :inherited-members:
 """
-
+from zarr.experimental.cache_store import CacheStore
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.coordinates import base, core
@@ -533,8 +533,9 @@ class ZARRH5MDReader(base.ReaderBase):
         # special case: using builtin LRU cache
         # normally the cache object handles cache construction
         if self._cache_type == ZarrLRUCache:
-            cache = zarr.storage.LRUStoreCache(
-                self._mapping, max_size=self._cache_size
+            mem_store = zarr.storage.MemoryStore()
+            cache = CacheStore(
+                store=self._mapping, cache_store=mem_store, max_size=self._cache_size
             )
             self._file = zarr.open_group(store=cache, mode="r")
         else:
