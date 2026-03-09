@@ -67,7 +67,7 @@ machine learning models without downloading and storing trajectory data.
 The computing power in HPC environments has increased to the point where
 running simulation algorithms is often no longer the constraint in
 obtaining scientific insights from molecular dynamics trajectory data. 
-Instead, the ability to process, analyze and share large volumes of data provide 
+Instead, the ability to process, analyze and share large volumes of data provides 
 new constraints on research in this field [@SharingMD:2019].
 
 Other groups in the field recognize this same need for adherence to 
@@ -82,7 +82,7 @@ for publicly-available GROMACS simulation data [@MDverse:2024].
 
 While these efforts currently offer solutions for indexing,
 searching, and visualizing MD trajectory data, the problem of distributing trajectories 
-in way that enables *NumPy*-like slicing and parallel reading for use in arbitrary analysis 
+in a way that enables *NumPy*-like slicing and parallel reading for use in arbitrary analysis 
 tasks remains.
 
 Although exposing download links on the open internet offers a simple solution to this problem,
@@ -191,13 +191,13 @@ frame `timestep` although in principle, any kind of analysis code can run here a
 process the coordinates available in `u.atoms.positions`.
 
 The `Universe` object can be used as if the underlying trajectory file were a
-local file. For example, we can use `u` from the preceeding example with one of
+local file. For example, we can use `u` from the preceding example with one of
 the standard analysis tools in MDAnalysis, the calculation of the root mean
 square distance (RMSD) after optimal structural superposition [@Liu:2010] in
 the `MDAnalysis.analysis.rms.RMSD` class. In the example below we select only the
-C$_\alpha$ atoms of the protein with a MDAnalysis selection. We run the
+C$_\alpha$ atoms of the protein with an MDAnalysis selection. We run the
 analysis with the `.run()` method while stepping through the trajectory at
-increments of 100 frames. We then print the first and last data point from the
+increments of 100 frames. We then print the first and last data points from the
 results array:
 
 ```python
