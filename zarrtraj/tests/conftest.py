@@ -14,6 +14,8 @@ from moto.server import ThreadedMotoServer
 import os
 import boto3
 
+MOTO_PORT = 5001
+
 
 @pytest.fixture(scope="session", autouse=True)
 def moto_server():
@@ -27,12 +29,12 @@ def moto_server():
     # For convenience, set dict options as env vars
     # boto options
     os.environ["AWS_DEFAULT_REGION"] = "us-west-1"
-    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:5000"
+    os.environ["AWS_ENDPOINT_URL"] = f"http://localhost:{MOTO_PORT}"
     # s3fs options
     os.environ["S3_REGION_NAME"] = "us-west-1"
-    os.environ["S3_ENDPOINT_URL"] = "http://localhost:5000"
+    os.environ["S3_ENDPOINT_URL"] = f"http://localhost:{MOTO_PORT}"
 
-    server = ThreadedMotoServer()
+    server = ThreadedMotoServer(port=MOTO_PORT)
     server.start()
 
     # Using boto3.resource rather than .client since we don't

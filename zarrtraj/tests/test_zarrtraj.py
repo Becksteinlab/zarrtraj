@@ -93,7 +93,16 @@ class H5MDFmtReference(BaseReference):
         return ts
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(
+    scope="class",
+    params=[
+        ("s3", COORDINATES_SYNTHETIC_H5MD),
+        ("local", COORDINATES_SYNTHETIC_H5MD),
+        ("s3", COORDINATES_SYNTHETIC_ZARRMD),
+        ("local", COORDINATES_SYNTHETIC_ZARRMD),
+    ],
+    ids=["s3-h5md", "local-h5md", "s3-zarrmd", "local-zarrmd"],
+)
 def ref(request):
     store, filename = request.param
     if store == "s3":
@@ -107,17 +116,6 @@ def ref(request):
         yield H5MDFmtReference(filename)
 
 
-@pytest.mark.parametrize(
-    "ref",
-    [
-        ("s3", COORDINATES_SYNTHETIC_H5MD),
-        ("local", COORDINATES_SYNTHETIC_H5MD),
-        ("s3", COORDINATES_SYNTHETIC_ZARRMD),
-        ("local", COORDINATES_SYNTHETIC_ZARRMD),
-    ],
-    ids=["s3-h5md", "local-h5md", "s3-zarrmd", "local-zarrmd"],
-    indirect=True,
-)
 class TestH5MDFmtReaderBaseAPI(MultiframeReaderTest):
     """Tests ZarrTrajReader with with synthetic trajectory."""
 
