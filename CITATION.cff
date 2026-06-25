@@ -4,8 +4,8 @@
 cff-version: 1.2.0
 title: 'Zarrtraj: A Python package for streaming molecular dynamics trajectories from cloud services'
 message: >-
-  If you use this software, please cite it using the
-  metadata from this file.
+  If you use this software, please cite the JOSS paper listed
+  under preferred-citation.
 type: software
 authors:
   - given-names: Lawson
@@ -65,3 +65,35 @@ keywords:
   - mdanalysis
   - zarr
 license: MIT
+preferred-citation:
+  type: article
+  title: >-
+    Zarrtraj: A Python package for streaming molecular dynamics
+    trajectories from cloud services
+  authors:
+    - given-names: Lawson
+      family-names: Woods
+      orcid: 'https://orcid.org/0009-0003-0713-4167'
+    - given-names: Hugo
+      family-names: MacDermott-Opeskin
+      orcid: 'https://orcid.org/0000-0002-7393-7457'
+    - given-names: Edis
+      family-names: Jakupovic
+      orcid: 'https://orcid.org/0000-0001-8813-6356'
+    - given-names: Yuxuan
+      family-names: Zhuang
+      orcid: 'https://orcid.org/0000-0003-4390-8556'
+    - given-names: Richard
+      family-names: Gowers
+      name-particle: J
+      orcid: 'https://orcid.org/0000-0002-3241-1846'
+    - given-names: Oliver
+      family-names: Beckstein
+      orcid: 'https://orcid.org/0000-0003-1340-0831'
+  journal: Journal of Open Source Software
+  year: 2026
+  volume: 11
+  issue: 121
+  start: 7943
+  doi: 10.21105/joss.07943
+  url: 'https://doi.org/10.21105/joss.07943'
