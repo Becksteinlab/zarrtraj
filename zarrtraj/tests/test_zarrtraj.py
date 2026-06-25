@@ -16,9 +16,8 @@ from MDAnalysisTests.coordinates.base import (
     BaseReference,
     BaseWriterTest,
     assert_timestep_almost_equal,
-    assert_array_almost_equal,
 )
-from numpy.testing import assert_equal
+from numpy.testing import assert_equal, assert_array_almost_equal
 from MDAnalysisTests.datafiles import (
     H5MD_xvf,
     TPR_xvf,
