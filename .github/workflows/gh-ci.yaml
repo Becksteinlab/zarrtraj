@@ -30,7 +30,7 @@ jobs:
       stable-python-version: ${{ steps.get-compatible-python.outputs.stable-python }}
       python-matrix: ${{ steps.get-compatible-python.outputs.python-versions }}
     steps:
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ needs.environment-config.outputs.stable-python-version }}
 
@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Python ${{ needs.environment-config.outputs.stable-python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ needs.environment-config.outputs.stable-python-version }}
 
