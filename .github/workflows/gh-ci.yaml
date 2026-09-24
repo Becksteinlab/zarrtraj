@@ -111,7 +111,7 @@ jobs:
       - name: codecov
         if: github.repository == 'Becksteinlab/zarrtraj' && github.event_name !=
           'schedule'
-        uses: codecov/codecov-action@v7.0.0
+        uses: codecov/codecov-action@v7.1.1
         with:
           file: coverage.xml
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
